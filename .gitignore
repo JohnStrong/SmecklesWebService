@@ -41,3 +41,8 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Scala ###
+.bsp
+project/target
+build.log
