@@ -1,0 +1,2 @@
+GET     /api/v1/customer/:id    controllers.CustomerController.getCustomerById(id: String)
+POST    /api/v1/customer        controllers.CustomerController.createCustomer()

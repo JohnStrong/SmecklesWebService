@@ -37,47 +37,86 @@ Akka changed to a Business Source License (BSL) in 2022, making it non-free for 
 ## Project Structure
 
 ```
-src/
-├── main/
-│   ├── java/org/myapps/shoppinglistservice/
-│   │   ├── Application.java
-│   │   ├── controller/
-│   │   │   └── CustomerController.java
-│   │   ├── model/
-│   │   │   ├── Customer.java
-│   │   │   ├── Item.java
-│   │   │   └── ShoppingList.java
-│   │   ├── service/
-│   │   │   ├── CustomerService.java
-│   │   │   ├── CustomerServiceImpl.java
-│   │   │   ├── ShoppingListService.java
-│   │   │   └── ShoppingCartServiceImpl.java
-│   │   └── repo/
-│   │       ├── CustomerRepository.java
-│   │       ├── ItemsRepository.java
-│   │       └── ShoppingListRepository.java
-│   └── resources/
-│       └── application.properties
-└── test/
-    └── scala/org/myapps/shoppinglistservice/
-        └── controller/
-            └── CustomerControllerSpec.scala
+app/
+├── controllers/
+│   └── Customer.scala          # REST endpoints
+├── models/
+│   └── Customer.scala          # Case class + JSON format
+├── services/
+│   └── Customer.scala          # Service trait + in-memory impl
+└── Module.scala                # Guice DI bindings
+conf/
+├── application.conf            # Play/Pekko config (HOCON)
+├── routes                      # URL routing
+└── logback.xml                 # Logging
+test/
+├── controllers/
+│   └── CustomerControllerSpec.scala
+├── models/
+│   └── CustomerModelSpec.scala
+└── services/
+    └── CustomerServiceImplSpec.scala
+```
+
+## How To Run
+
+```bash
+sbt run
+```
+
+Server starts on **http://localhost:9000** with auto-reloading enabled.
+
+## How To Test
+
+```bash
+sbt test
+```
+
+## API
+
+### Create Customer
+
+```
+POST /api/v1/customer
+Content-Type: application/json
+
+{"email": "user@example.com"}
+```
+
+| Status | Response |
+|--------|----------|
+| 201 | `{"id": "<uuid>", "email": "user@example.com"}` |
+| 400 | `{"error": "Email is required"}` |
+| 400 | `{"error": "Customer with email ... already exists."}` |
+
+### Get Customer by ID
+
+```
+GET /api/v1/customer/:id
+```
+
+| Status | Response |
+|--------|----------|
+| 200 | `{"id": "<uuid>", "email": "user@example.com"}` |
+| 404 | `{"error": "Customer with id ... not found."}` |
+
+### Example
+
+```bash
+# Create
+curl -X POST http://localhost:9000/api/v1/customer \
+  -H "Content-Type: application/json" \
+  -d '{"email":"hello@example.com"}'
+
+# Get (use id from create response)
+curl http://localhost:9000/api/v1/customer/<uuid>
 ```
 
 ## Project Status
 
-🚧 **Work in progress** — migrating from a Java/Spring Boot prototype to idiomatic Scala.
+🚧 **Work in progress** — next steps:
 
-## How To Run
-
-```
-sbt run
-```
-
-## Configuration
-
-Defined in `src/main/resources/application.conf` (HOCON format, used by Play/Pekko).
-
-## API
-
-_TODO — endpoints to be defined as migration progresses._
+- Shopping list and item endpoints
+- Persistent database (H2 → PostgreSQL)
+- Pekko actors for concurrent state management
+- Frontend integration with Pekko Streams
