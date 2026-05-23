@@ -39,19 +39,22 @@ Akka changed to a Business Source License (BSL) in 2022, making it non-free for 
 ```
 app/
 ├── controllers/
-│   ├── Customer.scala              # Customer REST endpoints
-│   └── ShoppingListController.scala # Shopping list REST endpoints
+│   ├── Customer.scala                          # Customer REST endpoints
+│   └── ShoppingListController.scala            # Shopping list REST endpoints
 ├── models/
-│   ├── Customer.scala              # Customer case class + JSON format
-│   └── ShoppingList.scala          # ShoppingListItem case class + JSON format
+│   ├── Customer.scala                          # Customer case class + JSON format
+│   ├── ShoppingList.scala                      # ShoppingList case class + JSON format
+│   ├── ShoppingListItem.scala                  # ShoppingListItem case class + JSON format
+│   └── requests/
+│       └── ShoppingListCreateRequest.scala     # Create shopping list request DTO
 ├── services/
-│   ├── Customer.scala              # Customer service trait + in-memory impl
-│   └── ShoppingList.scala          # Shopping list service trait + in-memory impl
-└── Module.scala                    # Guice DI bindings
+│   ├── Customer.scala                          # Customer service trait + in-memory impl
+│   └── ShoppingList.scala                      # Shopping list service trait + in-memory impl
+└── Module.scala                                # Guice DI bindings
 conf/
-├── application.conf                # Play/Pekko config (HOCON)
-├── routes                          # URL routing
-└── logback.xml                     # Logging
+├── application.conf                            # Play/Pekko config (HOCON)
+├── routes                                      # URL routing
+└── logback.xml                                 # Logging
 test/
 ├── controllers/
 │   ├── CustomerControllerSpec.scala
@@ -71,12 +74,6 @@ sbt run
 ```
 
 Server starts on **http://localhost:9000** with auto-reloading enabled.
-
-## How To Test
-
-```bash
-sbt test
-```
 
 ## API
 
@@ -106,6 +103,28 @@ GET /api/v1/customer/:email
 | 200 | `{"email": "user@example.com"}` |
 | 404 | `{"error": "Customer with email ... not found."}` |
 
+### Create Shopping List
+
+```
+POST /api/v1/shopping-list
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "name": "Weekly Groceries",
+  "items": [
+    {"name": "Milk", "quantity": 2},
+    {"name": "Bread", "quantity": 1}
+  ]
+}
+```
+
+| Status | Response |
+|--------|----------|
+| 201 | `{"name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` |
+| 409 | `{"error": "Shopping list already exists for email ..."}` |
+
 ### Get Shopping List
 
 ```
@@ -114,7 +133,7 @@ GET /api/v1/shopping-list/:email
 
 | Status | Response |
 |--------|----------|
-| 200 | `[{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]` |
+| 200 | `{"name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
 | 404 | `{"error": "No shopping list found for email ..."}` |
 
 ### Examples
@@ -127,6 +146,11 @@ curl -X POST http://localhost:9000/api/v1/customer \
 
 # Get customer by email
 curl http://localhost:9000/api/v1/customer/hello@example.com
+
+# Create a shopping list
+curl -X POST http://localhost:9000/api/v1/shopping-list \
+  -H "Content-Type: application/json" \
+  -d '{"email":"hello@example.com","name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
 
 # Get shopping list for a customer
 curl http://localhost:9000/api/v1/shopping-list/hello@example.com
@@ -154,7 +178,7 @@ Then use curl against **http://localhost:9000** as shown in the examples above.
 
 🚧 **Work in progress** — next steps:
 
-- Add/remove items from shopping lists
+- Add/remove items from existing shopping lists
 - Persistent database (H2 → PostgreSQL)
 - Pekko actors for concurrent state management
 - Frontend integration with Pekko Streams

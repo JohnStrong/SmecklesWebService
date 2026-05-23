@@ -76,7 +76,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
 
-    "return 400 when customer already exists" in {
+    "return 409 when customer already exists" in {
       val (controller, mockService) = createFixture()
       when(mockService.createCustomer("exists@example.com"))
         .thenReturn(Left("Customer with email exists@example.com already exists."))
@@ -86,8 +86,30 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
         .withBody(Json.obj("email" -> "exists@example.com"))
       val result = call(controller.createCustomer(), request)
 
-      status(result) shouldBe BAD_REQUEST
+      status(result) shouldBe CONFLICT
       (contentAsJson(result) \ "error").as[String] should include("already exists")
+    }
+
+    "return 400 when email is empty string" ignore {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> ""))
+      val result = call(controller.createCustomer(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when email is null" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> JsNull))
+      val result = call(controller.createCustomer(), request)
+
+      status(result) shouldBe BAD_REQUEST
     }
   }
 }

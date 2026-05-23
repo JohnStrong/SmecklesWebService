@@ -23,7 +23,7 @@ class CustomerController @Inject()(
     (request.body \ "email").asOpt[String] match {
       case None => BadRequest(Json.obj("error" -> "Email is required"))
       case Some(email) => customerService.createCustomer(email) match {
-        case Left(errorMessage) => BadRequest(Json.obj("error" -> errorMessage))
+        case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))
         case Right(customer) => Created(Json.toJson(customer))
       }
     }
