@@ -65,6 +65,9 @@ test/
 └── services/
     ├── CustomerServiceImplSpec.scala
     └── ShoppingListServiceImplSpec.scala
+functional-tests/
+└── api/
+    └── ShoppingListSpecFunctionalTest.scala    # End-to-end API tests
 ```
 
 ## How To Run
@@ -169,6 +172,14 @@ curl http://localhost:9000/api/v1/shopping-list/hello@example.com
 
 ```bash
 sbt test
+```
+
+### Functional tests
+
+End-to-end tests that boot the full application and exercise the real router, DI, and controllers:
+
+```bash
+sbt functional:test
 ```
 
 ### Manual testing
