@@ -108,5 +108,95 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
       (contentAsJson(result) \ "error").as[String] shouldBe "Invalid request format"
     }
+
+    "return 400 when email is empty" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "email" -> "",
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+        ))
+      val result = call(controller.create(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when name is empty" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "email" -> "user@example.com",
+          "name" -> "",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+        ))
+      val result = call(controller.create(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when items is empty list" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "email" -> "user@example.com",
+          "name" -> "Groceries",
+          "items" -> Json.arr()
+        ))
+      val result = call(controller.create(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when item name is empty" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "email" -> "user@example.com",
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "", "quantity" -> 2))
+        ))
+      val result = call(controller.create(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when item quantity is zero" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "email" -> "user@example.com",
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 0))
+        ))
+      val result = call(controller.create(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when item quantity is negative" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "email" -> "user@example.com",
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> -1))
+        ))
+      val result = call(controller.create(), request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
   }
 }

@@ -34,5 +34,23 @@ class ShoppingListItemModelSpec extends AnyWordSpec with Matchers {
 
       json.validate[ShoppingListItem] shouldBe a[JsError]
     }
+
+    "fail to deserialize when name is empty" in {
+      val json = Json.obj("name" -> "", "quantity" -> 2)
+
+      json.validate[ShoppingListItem] shouldBe a[JsError]
+    }
+
+    "fail to deserialize when quantity is zero" in {
+      val json = Json.obj("name" -> "Milk", "quantity" -> 0)
+
+      json.validate[ShoppingListItem] shouldBe a[JsError]
+    }
+
+    "fail to deserialize when quantity is negative" in {
+      val json = Json.obj("name" -> "Milk", "quantity" -> -1)
+
+      json.validate[ShoppingListItem] shouldBe a[JsError]
+    }
   }
 }

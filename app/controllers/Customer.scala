@@ -20,7 +20,7 @@ class CustomerController @Inject()(
   }
 
   def createCustomer(): Action[JsValue] = Action(parse.json) { request =>
-    (request.body \ "email").asOpt[String] match {
+    (request.body \ "email").asOpt[String].filter(_.trim.nonEmpty) match {
       case None => BadRequest(Json.obj("error" -> "Email is required"))
       case Some(email) => customerService.createCustomer(email) match {
         case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))

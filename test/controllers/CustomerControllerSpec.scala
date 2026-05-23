@@ -90,7 +90,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       (contentAsJson(result) \ "error").as[String] should include("already exists")
     }
 
-    "return 400 when email is empty string" ignore {
+    "return 400 when email is empty string" in {
       val (controller, _) = createFixture()
 
       val request = FakeRequest(POST, "/")

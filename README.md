@@ -89,8 +89,8 @@ Content-Type: application/json
 | Status | Response |
 |--------|----------|
 | 201 | `{"email": "user@example.com"}` |
-| 400 | `{"error": "Email is required"}` |
-| 400 | `{"error": "Customer with email ... already exists."}` |
+| 400 | `{"error": "Email is required"}` — missing, null, or empty string |
+| 409 | `{"error": "Customer with email ... already exists."}` |
 
 ### Get Customer by Email
 
@@ -119,10 +119,17 @@ Content-Type: application/json
 }
 ```
 
+Validation rules:
+- `email` — required, cannot be empty
+- `name` — required, cannot be empty
+- `items` — required, must contain at least one item
+- Each item `name` — required, cannot be empty
+- Each item `quantity` — required, must be at least 1
+
 | Status | Response |
 |--------|----------|
 | 201 | `{"name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
-| 400 | `{"error": "Invalid request format", "details": {...}}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
 | 409 | `{"error": "Shopping list already exists for email ..."}` |
 
 ### Get Shopping List
