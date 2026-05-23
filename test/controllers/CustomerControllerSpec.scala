@@ -3,7 +3,6 @@ package controllers
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 import org.mockito.Mockito.*
-import org.mockito.ArgumentMatchers.*
 import play.api.test.*
 import play.api.test.Helpers.*
 import play.api.libs.json.*
@@ -12,7 +11,6 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
 import services.CustomerService
 import models.Customer
-import java.util.UUID
 
 class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
@@ -26,16 +24,15 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
     (controller, mockService)
   }
 
-  private val testId = UUID.randomUUID()
-  private val testCustomer = Customer(id = testId, email = "test@example.com")
+  private val testCustomer = Customer(email = "test@example.com")
 
-  "getCustomerById" should {
+  "getCustomerByEmail" should {
 
     "return 200 with customer JSON when found" in {
       val (controller, mockService) = createFixture()
-      when(mockService.findById(testId.toString)).thenReturn(Right(testCustomer))
+      when(mockService.findByEmail("test@example.com")).thenReturn(Right(testCustomer))
 
-      val result = controller.getCustomerById(testId.toString).apply(FakeRequest())
+      val result = controller.getCustomerByEmail("test@example.com").apply(FakeRequest())
 
       status(result) shouldBe OK
       (contentAsJson(result) \ "email").as[String] shouldBe "test@example.com"
@@ -43,9 +40,10 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
     "return 404 when customer not found" in {
       val (controller, mockService) = createFixture()
-      when(mockService.findById("missing")).thenReturn(Left("Customer with id missing not found."))
+      when(mockService.findByEmail("missing@example.com"))
+        .thenReturn(Left("Customer with email missing@example.com not found."))
 
-      val result = controller.getCustomerById("missing").apply(FakeRequest())
+      val result = controller.getCustomerByEmail("missing@example.com").apply(FakeRequest())
 
       status(result) shouldBe NOT_FOUND
       (contentAsJson(result) \ "error").as[String] should include("not found")

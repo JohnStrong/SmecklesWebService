@@ -12,8 +12,8 @@ class CustomerController @Inject()(
   customerService: CustomerService
 ) extends BaseController {
 
-  def getCustomerById(id: String) = Action {
-    customerService.findById(id) match {
+  def getCustomerByEmail(email: String): Action[AnyContent] = Action {
+    customerService.findByEmail(email) match {
       case Left(errorMessage) => NotFound(Json.obj("error" -> errorMessage))
       case Right(customer) => Ok(Json.toJson(customer))
     }

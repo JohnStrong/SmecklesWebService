@@ -91,20 +91,20 @@ Content-Type: application/json
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"id": "<uuid>", "email": "user@example.com"}` |
+| 201 | `{"email": "user@example.com"}` |
 | 400 | `{"error": "Email is required"}` |
 | 400 | `{"error": "Customer with email ... already exists."}` |
 
-### Get Customer by ID
+### Get Customer by Email
 
 ```
-GET /api/v1/customer/:id
+GET /api/v1/customer/:email
 ```
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"id": "<uuid>", "email": "user@example.com"}` |
-| 404 | `{"error": "Customer with id ... not found."}` |
+| 200 | `{"email": "user@example.com"}` |
+| 404 | `{"error": "Customer with email ... not found."}` |
 
 ### Get Shopping List
 
@@ -125,8 +125,8 @@ curl -X POST http://localhost:9000/api/v1/customer \
   -H "Content-Type: application/json" \
   -d '{"email":"hello@example.com"}'
 
-# Get customer (use id from create response)
-curl http://localhost:9000/api/v1/customer/<uuid>
+# Get customer by email
+curl http://localhost:9000/api/v1/customer/hello@example.com
 
 # Get shopping list for a customer
 curl http://localhost:9000/api/v1/shopping-list/hello@example.com

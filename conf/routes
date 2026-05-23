@@ -1,4 +1,4 @@
-GET     /api/v1/customer/:id    controllers.CustomerController.getCustomerById(id: String)
+GET     /api/v1/customer/:email controllers.CustomerController.getCustomerByEmail(email: String)
 POST    /api/v1/customer        controllers.CustomerController.createCustomer()
 
 GET     /api/v1/shopping-list/:email    controllers.ShoppingListController.getShoppingList(email: String)

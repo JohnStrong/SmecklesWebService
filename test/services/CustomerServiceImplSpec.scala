@@ -14,8 +14,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers {
       val service = freshService()
       val result = service.createCustomer("new@example.com")
 
-      result shouldBe a[Right[_, _]]
-      result.toOption.get.email shouldBe "new@example.com"
+      result shouldBe Right(Customer("new@example.com"))
     }
 
     "return Left with error when email already exists" in {
@@ -27,30 +26,22 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers {
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("already exists")
     }
-
-    "assign a unique ID to each customer" in {
-      val service = freshService()
-      val c1 = service.createCustomer("a@example.com").toOption.get
-      val c2 = service.createCustomer("b@example.com").toOption.get
-
-      c1.id should not be c2.id
-    }
   }
 
-  "findById" should {
+  "findByEmail" should {
 
     "return Right with customer when found" in {
       val service = freshService()
-      val created = service.createCustomer("find@example.com").toOption.get
+      service.createCustomer("find@example.com")
 
-      val result = service.findById(created.id.toString)
+      val result = service.findByEmail("find@example.com")
 
-      result shouldBe Right(created)
+      result shouldBe Right(Customer("find@example.com"))
     }
 
     "return Left with error when not found" in {
       val service = freshService()
-      val result = service.findById("nonexistent-id")
+      val result = service.findByEmail("nonexistent@example.com")
 
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("not found")
