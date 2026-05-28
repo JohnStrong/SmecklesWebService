@@ -12,6 +12,7 @@ class SlickCustomerRepository @Inject()(
 
   import profile.api.*
 
+  // Implementation note: Slick works weird with case classes, so always define class for Table constructs
   private class CustomerTable(tag: Tag) extends Table[Customer](tag, "customers") {
     def email = column[String]("email", O.PrimaryKey)
 
