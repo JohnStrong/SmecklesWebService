@@ -18,10 +18,10 @@ A web application for managing shopping lists — built as a personal, independe
   - [Get Shopping List](#get-shopping-list)
   - [Examples](#examples)
 - [Database Configuration](#database-configuration)
-  - [Current Setup (Local Development)](#current-setup-local-development)
-  - [Switching to PostgreSQL (Production)](#switching-to-postgresql-production)
   - [Per-Environment Configuration](#per-environment-configuration)
-  - [File-Based H2 (Persistent Local Dev)](#file-based-h2-persistent-local-dev)
+  - [Current Setup (Local Development + Functional Tests)](#current-setup-local-development--functional-tests)
+  - [Unit Test Configuration](#unit-test-configuration)
+  - [Switching to PostgreSQL (Production)](#switching-to-postgresql-production)
 - [How To Test](#how-to-test)
   - [Unit tests](#unit-tests)
   - [Functional tests](#functional-tests)
@@ -69,23 +69,27 @@ app/
 │   └── ShoppingListController.scala            # Shopping list REST endpoints
 ├── models/
 │   ├── Customer.scala                          # Customer case class + JSON format
-│   ├── ShoppingList.scala                      # ShoppingList case class + JSON format
-│   ├── ShoppingListItem.scala                  # ShoppingListItem case class + JSON format
+│   ├── ShoppingList.scala                      # ShoppingListWithItems domain model
+│   ├── ShoppingListItem.scala                  # ShoppingListItem + DecoupledShoppingListItem
 │   └── requests/
 │       └── ShoppingListCreateRequest.scala     # Create shopping list request DTO
 ├── repositories/
 │   ├── DataRepository.scala                    # Base trait: async CRUD contract
+│   ├── SlickDataRepository.scala               # Base Slick repository (play-slick)
 │   ├── InMemoryDataRepository.scala            # In-memory HashMap-backed trait
 │   ├── customer/
-│   │   └── CustomerRepository.scala            # Concrete in-memory customer repo
+│   │   ├── CustomerRepository.scala            # Concrete in-memory customer repo
+│   │   └── SlickCustomerRepository.scala       # Slick/H2/PostgreSQL customer repo
 │   └── shoppinglist/
-│       └── ShoppingListRepository.scala        # Concrete in-memory shopping list repo
+│       ├── ShoppingListRepository.scala        # Concrete in-memory shopping list repo
+│       └── SlickShoppingListRepository.scala   # Slick/H2/PostgreSQL shopping list repo
 ├── services/
 │   ├── Customer.scala                          # Customer service trait + impl
 │   └── ShoppingList.scala                      # Shopping list service trait + impl
 └── Module.scala                                # Guice DI bindings
 conf/
-├── application.conf                            # Play/Pekko config (HOCON)
+├── application.conf                            # Base config: named H2 (local dev + functional tests)
+├── test.conf                                   # Unit test overrides: anonymous H2 (isolated per test)
 ├── evolutions/
 │   └── default/
 │       └── 1.sql                               # Initial schema (customers, lists, items)
@@ -100,9 +104,11 @@ test/
 │   └── ShoppingListItemModelSpec.scala
 ├── repositories/
 │   ├── customer/
-│   │   └── CustomerRepositorySpec.scala
+│   │   ├── CustomerRepositorySpec.scala
+│   │   └── SlickCustomerRepositorySpec.scala
 │   └── shoppinglist/
-│       └── ShoppingListRepositorySpec.scala
+│       ├── ShoppingListRepositorySpec.scala
+│       └── SlickShoppingListRepositorySpec.scala
 └── services/
     ├── CustomerServiceImplSpec.scala
     └── ShoppingListServiceImplSpec.scala
@@ -256,72 +262,82 @@ curl http://localhost:9000/api/v1/shopping-list/hello@example.com
 
 ## Database Configuration
 
-The application uses [Play Evolutions](https://www.playframework.com/documentation/3.0.x/Evolutions) for schema management and JDBC for database access. Schema migrations live in `conf/evolutions/default/`.
-
-### Current Setup (Local Development)
-
-H2 in-memory database running in **PostgreSQL compatibility mode**:
-
-```hocon
-db.default.driver = org.h2.Driver
-db.default.url = "jdbc:h2:mem:shoppinglist;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
-db.default.username = "sa"
-db.default.password = ""
-```
-
-- `DB_CLOSE_DELAY=-1` — keeps the in-memory DB alive for the lifetime of the JVM
-- `MODE=PostgreSQL` — ensures SQL syntax compatibility so the same evolutions and queries work against both H2 and PostgreSQL
-- `play.evolutions.db.default.autoApply = true` — applies pending migrations automatically on startup
-
-### Switching to PostgreSQL (Production)
-
-Override the database config via environment variables or a separate config file:
-
-```hocon
-db.default.driver = org.postgresql.Driver
-db.default.url = ${DB_URL}
-db.default.username = ${DB_USERNAME}
-db.default.password = ${DB_PASSWORD}
-```
-
-Add the PostgreSQL driver dependency in `build.sbt`:
-
-```scala
-"org.postgresql" % "postgresql" % "42.7.3"
-```
+The application uses [Play Evolutions](https://www.playframework.com/documentation/3.0.x/Evolutions) for schema management and [play-slick](https://www.playframework.com/documentation/3.0.x/PlaySlick) for database access. Schema migrations live in `conf/evolutions/default/`.
 
 ### Per-Environment Configuration
 
-Play supports environment-specific config files that override the base `application.conf`:
+| File | Purpose | Database | How to activate |
+|------|---------|----------|-----------------|
+| `conf/application.conf` | Base config (local dev + functional tests) | Named H2 in-memory (`mem:shoppinglist`) with `DB_CLOSE_DELAY=-1` | Always loaded by default |
+| `conf/test.conf` | Unit test overrides | Anonymous H2 in-memory (`mem:`) — isolated per test, no shared state | `sbt test` (forked JVM via `build.sbt`) |
+| `conf/production.conf` | Production overrides (planned) | External PostgreSQL | `-Dconfig.resource=production.conf` |
 
-| File | Purpose | How to activate |
-|------|---------|-----------------|
-| `conf/application.conf` | Base config (H2 dev defaults) | Always loaded |
-| `conf/production.conf` | Production overrides (PostgreSQL) | `-Dconfig.resource=production.conf` |
-| `conf/integration-test.conf` | Integration test overrides | `-Dconfig.resource=integration-test.conf` |
+### Current Setup (Local Development + Functional Tests)
 
-Example `conf/production.conf`:
+`conf/application.conf` — Named H2 in-memory database running in **PostgreSQL compatibility mode**:
+
+```hocon
+slick.dbs.default {
+  profile = "slick.jdbc.H2Profile$"
+  db {
+    driver = "org.h2.Driver"
+    url = "jdbc:h2:mem:shoppinglist;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=true"
+    user = "sa"
+    password = ""
+  }
+}
+```
+
+- `mem:shoppinglist` — **named** in-memory DB; all repositories in the same JVM share this single database instance (customers + shopping lists coexist)
+- `DB_CLOSE_DELAY=-1` — keeps the DB alive for the lifetime of the JVM even when no connections are open
+- `MODE=PostgreSQL` — ensures SQL syntax compatibility so the same evolutions and queries work against both H2 and PostgreSQL
+- `DATABASE_TO_LOWER=true` — forces lowercase table names to match PostgreSQL behaviour
+- `play.evolutions.db.default.autoApply = true` — applies pending migrations automatically on startup
+
+### Unit Test Configuration
+
+`conf/test.conf` — Anonymous H2 for **complete test isolation**:
 
 ```hocon
 include "application.conf"
 
-db.default.driver = org.postgresql.Driver
-db.default.url = ${DB_URL}
-db.default.username = ${DB_USERNAME}
-db.default.password = ${DB_PASSWORD}
+slick.dbs.default.db.url = "jdbc:h2:mem:;MODE=PostgreSQL;DATABASE_TO_LOWER=true"
+```
+
+- No database name after `mem:` — each new connection pool gets its own **private** database instance
+- No `DB_CLOSE_DELAY` — DB dies when the connection pool closes
+- Combined with `GuiceOneAppPerTest`, each test gets a fresh empty database with no leftover state from other tests
+
+Applied automatically via `build.sbt`:
+
+```scala
+Test / javaOptions += "-Dconfig.resource=test.conf"
+Test / fork := true
+```
+
+### Switching to PostgreSQL (Production)
+
+Planned `conf/production.conf`:
+
+```hocon
+include "application.conf"
+
+slick.dbs.default {
+  profile = "slick.jdbc.PostgresProfile$"
+  db {
+    driver = "org.postgresql.Driver"
+    url = ${DB_URL}
+    user = ${DB_USERNAME}
+    password = ${DB_PASSWORD}
+  }
+}
 
 play.evolutions.db.default.autoApply = false
 ```
 
 Run with: `sbt "run -Dconfig.resource=production.conf"` or set `JAVA_OPTS=-Dconfig.resource=production.conf`.
 
-### File-Based H2 (Persistent Local Dev)
-
-To persist data across restarts without a full database server:
-
-```hocon
-db.default.url = "jdbc:h2:./data/shoppinglist;MODE=PostgreSQL"
-```
+The PostgreSQL driver dependency is already included in `build.sbt`.
 
 ## How To Test
 
@@ -353,6 +369,7 @@ Then use curl against **http://localhost:9000** as shown in the examples above.
 
 🚧 **Work in progress** — next steps:
 
+- Integrate Slick repositories with customer/shopping list services (replace in-memory repos)
 - Add/remove items from existing shopping lists
 - Persistent database (H2 → PostgreSQL)
 - Pekko actors for concurrent state management
