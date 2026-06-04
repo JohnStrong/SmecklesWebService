@@ -8,6 +8,9 @@ case class ShoppingListWithItems(
   name: String,
   items: List[ShoppingListItem]
 )
+object ShoppingListWithItems {
+  implicit val format: Format[ShoppingListWithItems] = Json.format[ShoppingListWithItems]
+}
 
 @Deprecated("Use DecoupledShoppingList instead")
 case class ShoppingList(email: String, name: String, items: List[ShoppingListItem])

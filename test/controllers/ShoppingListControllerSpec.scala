@@ -10,7 +10,7 @@ import play.api.libs.json.*
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
 import services.ShoppingListService
-import models.{ShoppingList, ShoppingListItem}
+import models.{ShoppingListWithItems, ShoppingListItem}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -27,7 +27,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
     (controller, mockService)
   }
 
-  private val testList = ShoppingList("test@example.com", "Weekly Groceries", List(
+  private val testList = ShoppingListWithItems("test@example.com", "Weekly Groceries", List(
     ShoppingListItem("Milk", 2),
     ShoppingListItem("Bread", 1)
   ))
@@ -72,11 +72,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "Weekly Groceries",
           "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe CREATED
       (contentAsJson(result) \ "name").as[String] shouldBe "Weekly Groceries"
@@ -90,11 +89,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "Another List",
           "items" -> Json.arr(Json.obj("name" -> "Eggs", "quantity" -> 6))
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe CONFLICT
       (contentAsJson(result) \ "error").as[String] should include("already exists")
@@ -106,25 +104,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("bad" -> "data"))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe BAD_REQUEST
       (contentAsJson(result) \ "error").as[String] shouldBe "Invalid request format"
-    }
-
-    "return 400 when email is empty" in {
-      val (controller, _) = createFixture()
-
-      val request = FakeRequest(POST, "/")
-        .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj(
-          "email" -> "",
-          "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
-        ))
-      val result = call(controller.create(), request)
-
-      status(result) shouldBe BAD_REQUEST
     }
 
     "return 400 when name is empty" in {
@@ -133,11 +116,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "",
           "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe BAD_REQUEST
     }
@@ -148,11 +130,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "Groceries",
           "items" -> Json.arr()
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe BAD_REQUEST
     }
@@ -163,11 +144,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "Groceries",
           "items" -> Json.arr(Json.obj("name" -> "", "quantity" -> 2))
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe BAD_REQUEST
     }
@@ -178,11 +158,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "Groceries",
           "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 0))
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe BAD_REQUEST
     }
@@ -193,11 +172,10 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "email" -> "user@example.com",
           "name" -> "Groceries",
           "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> -1))
         ))
-      val result = call(controller.create(), request)
+      val result = call(controller.create("user@example.com"), request)
 
       status(result) shouldBe BAD_REQUEST
     }

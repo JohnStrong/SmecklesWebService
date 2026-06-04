@@ -177,7 +177,7 @@ Server starts on **http://localhost:9000** with auto-reloading enabled.
 ### Create Customer
 
 ```
-POST /api/v1/customer
+POST /api/v1/customers
 Content-Type: application/json
 
 {"email": "user@example.com"}
@@ -192,7 +192,7 @@ Content-Type: application/json
 ### Get Customer by Email
 
 ```
-GET /api/v1/customer/:email
+GET /api/v1/customers/:email
 ```
 
 | Status | Response |
@@ -203,11 +203,10 @@ GET /api/v1/customer/:email
 ### Create Shopping List
 
 ```
-POST /api/v1/shopping-list
+POST /api/v1/customers/:email/shopping-lists
 Content-Type: application/json
 
 {
-  "email": "user@example.com",
   "name": "Weekly Groceries",
   "items": [
     {"name": "Milk", "quantity": 2},
@@ -217,7 +216,6 @@ Content-Type: application/json
 ```
 
 Validation rules:
-- `email` — required, cannot be empty
 - `name` — required, cannot be empty
 - `items` — required, must contain at least one item
 - Each item `name` — required, cannot be empty
@@ -225,39 +223,39 @@ Validation rules:
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
+| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
 | 409 | `{"error": "Shopping list already exists for email ..."}` |
 
 ### Get Shopping List
 
 ```
-GET /api/v1/shopping-list/:email
+GET /api/v1/customers/:email/shopping-lists
 ```
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
+| 200 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
 | 404 | `{"error": "No shopping list found for email ..."}` |
 
 ### Examples
 
 ```bash
 # Create a customer
-curl -X POST http://localhost:9000/api/v1/customer \
+curl -X POST http://localhost:9000/api/v1/customers \
   -H "Content-Type: application/json" \
   -d '{"email":"hello@example.com"}'
 
 # Get customer by email
-curl http://localhost:9000/api/v1/customer/hello@example.com
+curl http://localhost:9000/api/v1/customers/hello@example.com
 
 # Create a shopping list
-curl -X POST http://localhost:9000/api/v1/shopping-list \
+curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists \
   -H "Content-Type: application/json" \
-  -d '{"email":"hello@example.com","name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
+  -d '{"name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
 
 # Get shopping list for a customer
-curl http://localhost:9000/api/v1/shopping-list/hello@example.com
+curl http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists
 ```
 
 ## Database Configuration
@@ -369,7 +367,7 @@ Then use curl against **http://localhost:9000** as shown in the examples above.
 
 🚧 **Work in progress** — next steps:
 
-- Integrate Slick repositories with customer/shopping list services (replace in-memory repos)
+- ~~Integrate Slick repositories with customer/shopping list services (replace in-memory repos)~~ ✅
 - Add/remove items from existing shopping lists
 - Persistent database (H2 → PostgreSQL)
 - Pekko actors for concurrent state management
@@ -389,11 +387,11 @@ Then use curl against **http://localhost:9000** as shown in the examples above.
 Shopping lists are always scoped under customers — they don't exist as an independent resource:
 
 ```
-POST   /api/v1/customers                                   # create customer
-GET    /api/v1/customers/:email                            # get customer
+POST   /api/v1/customers                                   # create customer ✅
+GET    /api/v1/customers/:email                            # get customer ✅
 
-POST   /api/v1/customers/:email/shopping-lists             # create a list
-GET    /api/v1/customers/:email/shopping-lists             # get all lists for customer
+POST   /api/v1/customers/:email/shopping-lists             # create a list ✅
+GET    /api/v1/customers/:email/shopping-lists             # get all lists for customer ⚠️ (returns single list for now)
 GET    /api/v1/customers/:email/shopping-lists/:name       # get one list by name
 PUT    /api/v1/customers/:email/shopping-lists/:name       # update a list
 DELETE /api/v1/customers/:email/shopping-lists/:name       # delete a list

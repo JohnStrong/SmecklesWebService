@@ -12,7 +12,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with GuiceOneAppPerSuite {
 
     "create a new customer and get it" in {
       // create the customer
-      val createCustomer = FakeRequest(POST, "/api/v1/customer")
+      val createCustomer = FakeRequest(POST, "/api/v1/customers")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "functional@test.com"))
       val response = route(app, createCustomer).get
@@ -20,22 +20,22 @@ class CustomerServiceFunctionalTest extends PlaySpec with GuiceOneAppPerSuite {
       contentAsJson(response) mustBe Json.obj("email" -> "functional@test.com")
 
       // get the customer details
-      val getCustomerById = FakeRequest(GET, "/api/v1/customer/functional@test.com")
+      val getCustomerById = FakeRequest(GET, "/api/v1/customers/functional@test.com")
         .withHeaders("Content-Type" -> "application/json")
       val getResponse = route(app, getCustomerById).get
       status(getResponse) mustBe OK
-      contentAsJson(response) mustBe Json.obj("email" -> "functional@test.com")
+      contentAsJson(getResponse) mustBe Json.obj("email" -> "functional@test.com")
     }
 
     "return 404 when getting a non-existent customer" in {
-      val request = FakeRequest(GET, "/api/v1/customer/nonexistent@test.com")
+      val request = FakeRequest(GET, "/api/v1/customers/nonexistent@test.com")
       val response = route(app, request).get
       status(response) mustBe NOT_FOUND
       (contentAsJson(response) \ "error").as[String] must include("nonexistent@test.com")
     }
 
     "return 409 when creating a duplicate customer" in {
-      val request = FakeRequest(POST, "/api/v1/customer")
+      val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "duplicate@test.com"))
 
@@ -50,7 +50,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with GuiceOneAppPerSuite {
     }
 
     "return 400 when email is missing" in {
-      val request = FakeRequest(POST, "/api/v1/customer")
+      val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj())
       val response = route(app, request).get
@@ -59,7 +59,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with GuiceOneAppPerSuite {
     }
 
     "return 400 when email is empty" in {
-      val request = FakeRequest(POST, "/api/v1/customer")
+      val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> ""))
       val response = route(app, request).get
@@ -68,7 +68,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with GuiceOneAppPerSuite {
     }
 
     "return 400 when email is null" in {
-      val request = FakeRequest(POST, "/api/v1/customer")
+      val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> JsNull))
       val response = route(app, request).get

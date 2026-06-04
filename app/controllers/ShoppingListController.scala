@@ -21,13 +21,13 @@ class ShoppingListController @Inject()(
     }
   }
 
-  def create(): Action[JsValue] = Action.async(parse.json) { request =>
+  def create(email: String): Action[JsValue] = Action.async(parse.json) { request =>
     request.body.validate[ShoppingListCreateRequest] match {
       case JsError(errors) => Future.successful {
           BadRequest(Json.obj("error" -> "Invalid request format", "details" -> JsError.toJson(errors)))
         }
       case JsSuccess(createRequest, _) =>
-        service.create(createRequest.email, createRequest.name, createRequest.items) map {
+        service.create(email, createRequest.name, createRequest.items) map {
           case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))
           case Right(shoppingList) => Created(Json.toJson(shoppingList))
         }
