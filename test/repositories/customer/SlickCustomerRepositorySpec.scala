@@ -13,8 +13,7 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
   with Matchers
   with ScalaFutures
   with EitherValues
-  with GuiceOneAppPerTest // each test case creates a new guice app so data is not persisted cross tests
-  with BeforeAndAfterEach{
+  with GuiceOneAppPerTest { // each test case creates a new guice app so data is not persisted cross tests
 
   // db timeout config for tests
   implicit val patience: PatienceConfig = PatienceConfig(

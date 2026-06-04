@@ -24,7 +24,11 @@ lazy val root = (project in file("."))
     ),
     // Functional test configuration - run with sbt functional:test
     inConfig(FunctionalTest)(Defaults.testSettings),
+
     FunctionalTest / sourceDirectory := baseDirectory.value / "functional-tests",
     FunctionalTest / scalaSource := baseDirectory.value / "functional-tests",
-    FunctionalTest / resourceDirectory := baseDirectory.value / "functional-tests" / "resources"
+    FunctionalTest / resourceDirectory := baseDirectory.value / "functional-tests" / "resources",
+
+    Test / javaOptions += "-Dconfig.resource=test.conf",
+    Test / fork := true // spin up a fresh JVM for the test run (do not run inside the existing sbt JVM or javaOptions is not applied)
   )

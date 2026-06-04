@@ -2,13 +2,17 @@ package models
 
 import play.api.libs.json._
 
-// TODO - refactor to decouple items to list using an id instead (see <<SlickShoppingListRepository>> )
+// Internal Service Domain Model (service -> repo interfaces use this)
+case class ShoppingListWithItems(
+  id: Option[Long] = None, // return only, use None on the request path
+  email: String,
+  name: String,
+  items: List[ShoppingListItem]
+)
+
 @Deprecated("Use DecoupledShoppingList instead")
 case class ShoppingList(email: String, name: String, items: List[ShoppingListItem])
-
-// Use in favor of <<ShoppingList>>
-case class DecoupledShoppingList(id: Long, email: String, name: String)
-
+@Deprecated
 object ShoppingList {
   implicit val format: Format[ShoppingList] = Json.format[ShoppingList]
 }
