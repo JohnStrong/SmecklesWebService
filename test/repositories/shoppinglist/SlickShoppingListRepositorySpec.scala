@@ -43,10 +43,9 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       val result = repository.create(shoppingList).futureValue
       result.value.email shouldBe "test@example.com"
       result.value.name shouldBe "test-1"
-      result.value.id should not be None
 
-      val actualStored = repository.findByIdentifier(result.value.id.get).futureValue
-      actualStored.value shouldBe shoppingList.copy(id = result.value.id)
+      val actualStored = repository.findByIdentifier(result.value.email).futureValue
+      actualStored.value shouldBe shoppingList
     }
 
     "return an error message if a shopping list already exists for the email" in withCustomer {
@@ -62,13 +61,13 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     "return the shopping list and items for an entry that exists in the db" in withCustomer {
       val result = repository.create(shoppingList).futureValue
 
-      val stored = repository.findByIdentifier(result.value.id.get).futureValue
+      val stored = repository.findByIdentifier(result.value.email).futureValue
 
-      stored.value shouldBe shoppingList.copy(id = result.value.id)
+      stored.value shouldBe shoppingList
     }
 
     "return an error message if the shopping list is not found in the db" in {
-      val stored = repository.findByIdentifier(1L).futureValue
+      val stored = repository.findByIdentifier("doesnotexist@example.com").futureValue
 
       stored.left.value should include("No shopping list found")
     }

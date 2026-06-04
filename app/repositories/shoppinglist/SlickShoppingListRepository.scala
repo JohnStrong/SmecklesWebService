@@ -19,7 +19,6 @@ case class DecoupledShoppingListItem(
 object DecoupledShoppingList {
   def toShoppingListWithItems(shoppingList: DecoupledShoppingList, items: Seq[DecoupledShoppingListItem]) =
     ShoppingListWithItems(
-      id = Some(shoppingList.id),
       email = shoppingList.email,
       name = shoppingList.name,
       items = items.map(i => ShoppingListItem(name = i.name, quantity = i.quantity)).toList
@@ -28,7 +27,7 @@ object DecoupledShoppingList {
 
 class SlickShoppingListRepository @Inject()(
    dbConfigProvider: DatabaseConfigProvider
-)(implicit ec: ExecutionContext) extends SlickDataRepository[Long, ShoppingListWithItems](dbConfigProvider) {
+)(implicit ec: ExecutionContext) extends SlickDataRepository[String, ShoppingListWithItems](dbConfigProvider) {
 
   import profile.api.*
 
@@ -69,7 +68,7 @@ class SlickShoppingListRepository @Inject()(
             listId <- insertShoppingList(payload.email, payload.name)
             _ <- insertShoppingListItems(listId, payload.items)
             // yield transforms to .map so... DBIO[A,B].map { a:A => Right(b:B) }
-          } yield Right(payload.copy(id = Some(listId)))
+          } yield Right(payload)
       }
     } yield result).transactionally
 
@@ -77,14 +76,14 @@ class SlickShoppingListRepository @Inject()(
     db.run(action)
   }
 
-  override def findByIdentifier(id: Long): Future[Either[String, ShoppingListWithItems]] = {
+  override def findByIdentifier(email: String): Future[Either[String, ShoppingListWithItems]] = {
     val action = (for {
-      shoppingList <- shoppingLists.filter(sl => sl.id === id).result.headOption
+      shoppingList <- findByEmail(email).result.headOption
       result <- shoppingList match {
         case Some (list) => for {
-          items <- findItemsByIdentifier(id)
+          items <- findItemsByIdentifier(list.id)
         } yield Right(DecoupledShoppingList.toShoppingListWithItems(list, items))
-        case None => DBIO.successful(Left(s"No shopping list found for email $id."))
+        case None => DBIO.successful(Left(s"No shopping list found for email $email."))
       }
     } yield result)
 

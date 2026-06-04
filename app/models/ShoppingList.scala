@@ -4,7 +4,6 @@ import play.api.libs.json._
 
 // Internal Service Domain Model (service -> repo interfaces use this)
 case class ShoppingListWithItems(
-  id: Option[Long] = None, // return only, use None on the request path
   email: String,
   name: String,
   items: List[ShoppingListItem]
