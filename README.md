@@ -368,6 +368,7 @@ Then use curl against **http://localhost:9000** as shown in the examples above.
 🚧 **Work in progress** — next steps:
 
 - ~~Integrate Slick repositories with customer/shopping list services (replace in-memory repos)~~ ✅
+- Remove customer email from shopping list responses (redundant with path parameter)
 - Add/remove items from existing shopping lists
 - Persistent database (H2 → PostgreSQL)
 - Pekko actors for concurrent state management
