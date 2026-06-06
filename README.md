@@ -368,6 +368,7 @@ Then use curl against **http://localhost:9000** as shown in the examples above.
 🚧 **Work in progress** — next steps:
 
 - ~~Integrate Slick repositories with customer/shopping list services (replace in-memory repos)~~ ✅
+- ~~Get shopping lists returns list response (supports multiple lists per customer)~~ ✅
 - Remove customer email from shopping list responses (redundant with path parameter)
 - Add/remove items from existing shopping lists
 - Persistent database (H2 → PostgreSQL)
@@ -392,7 +393,7 @@ POST   /api/v1/customers                                   # create customer ✅
 GET    /api/v1/customers/:email                            # get customer ✅
 
 POST   /api/v1/customers/:email/shopping-lists             # create a list ✅
-GET    /api/v1/customers/:email/shopping-lists             # get all lists for customer ⚠️ (returns single list for now)
+GET    /api/v1/customers/:email/shopping-lists             # get all lists for customer ✅
 GET    /api/v1/customers/:email/shopping-lists/:name       # get one list by name
 PUT    /api/v1/customers/:email/shopping-lists/:name       # update a list
 DELETE /api/v1/customers/:email/shopping-lists/:name       # delete a list
