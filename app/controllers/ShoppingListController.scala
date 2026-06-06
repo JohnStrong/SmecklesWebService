@@ -24,7 +24,7 @@ class ShoppingListController @Inject()(
 
   def getShoppingLists(email: String): Action[AnyContent] = Action.async {
     service.getShoppingLists(email) map {
-      case Left(errorMessage) => NotFound(Json.obj("error" -> errorMessage))
+      case Left(errorMessage) => InternalServerError(Json.obj("error" -> errorMessage))
       case Right(shoppingList) => Ok(Json.toJson(shoppingList))
     }
   }

@@ -209,4 +209,58 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
   }
+
+  "getShoppingLists" should {
+    "return empty array when no shopping lists found" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.getShoppingLists(anyString())).thenReturn(Future.successful(Right(List())))
+
+      val result = controller.getShoppingLists("user@example.com").apply(FakeRequest())
+
+      status(result) shouldBe OK
+      contentAsJson(result) shouldBe Json.arr()
+    }
+
+    "return 200 with single shopping list" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.getShoppingLists("user@example.com"))
+        .thenReturn(Future.successful(Right(List(testList))))
+
+      val result = controller.getShoppingLists("user@example.com").apply(FakeRequest())
+
+      status(result) shouldBe OK
+      val json = contentAsJson(result).as[List[JsObject]]
+      json.length shouldBe 1
+      (json.head \ "name").as[String] shouldBe "Weekly Groceries"
+      (json.head \ "items").as[List[JsObject]].length shouldBe 2
+    }
+
+    "return 200 with multiple shopping lists" in {
+      val (controller, mockService) = createFixture()
+      val secondList = ShoppingListWithItems("user@example.com", "Hardware", List(ShoppingListItem("Nails", 20)))
+      when(mockService.getShoppingLists("user@example.com"))
+        .thenReturn(Future.successful(Right(List(testList, secondList))))
+
+      val result = controller.getShoppingLists("user@example.com").apply(FakeRequest())
+
+      status(result) shouldBe OK
+      val json = contentAsJson(result).as[List[JsObject]]
+      json.length shouldBe 2
+      (json(0) \ "name").as[String] shouldBe "Weekly Groceries"
+      (json(0) \ "items").as[List[JsObject]].length shouldBe 2
+      (json(1) \ "name").as[String] shouldBe "Hardware"
+      (json(1) \ "items").as[List[JsObject]].length shouldBe 1
+    }
+
+    "return 500 when service returns an unexpected error" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.getShoppingLists("user@example.com"))
+        .thenReturn(Future.successful(Left("Database connection failed")))
+
+      val result = controller.getShoppingLists("user@example.com").apply(FakeRequest())
+
+      status(result) shouldBe INTERNAL_SERVER_ERROR
+      (contentAsJson(result) \ "error").as[String] should include("Database connection failed")
+    }
+  }
 }
