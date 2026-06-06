@@ -91,19 +91,17 @@ class SlickShoppingListRepository @Inject()(
   }
 
   override def findAllByIdentifier(email: String): Future[Either[String, List[ShoppingListWithItems]]] = {
-    val action = (for {
+    val action = for {
       shoppingLists <- findByEmail(email).result
-      result <- shoppingLists match {
-        case listsRes if listsRes.isEmpty => // find no items
-          DBIO.successful(Left(s"No shopping list found for email $email."))
-        case nonEmptyListRes => // find at-least 1 item
-          val withItems = nonEmptyListRes.map { list =>
+      result <- if (shoppingLists.isEmpty) DBIO.successful(Right(List.empty[ShoppingListWithItems]))
+        else {
+          val withItems = shoppingLists.map { list =>
             findItemsByIdentifier(list.id)
               .map(items => DecoupledShoppingList.toShoppingListWithItems(list, items))
           }
           DBIO.sequence(withItems).map(results => Right(results.to(List)))
-      }
-   } yield result)
+        }
+    } yield result
 
     db.run(action)
   }

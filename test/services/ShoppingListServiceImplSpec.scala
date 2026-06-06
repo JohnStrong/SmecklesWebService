@@ -44,6 +44,39 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
     }
   }
 
+  "getShoppingLists" should {
+
+    "return Right with list of shopping lists" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.findAllByIdentifier("user@example.com"))
+        .thenReturn(Future.successful(Right(List(testList))))
+
+      val result = service.getShoppingLists("user@example.com").futureValue
+
+      result shouldBe Right(List(testList))
+    }
+
+    "return Right with empty list when no lists exist for email" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.findAllByIdentifier("empty@example.com"))
+        .thenReturn(Future.successful(Right(List.empty)))
+
+      val result = service.getShoppingLists("empty@example.com").futureValue
+
+      result shouldBe Right(List.empty)
+    }
+
+    "return Right with empty list when no customer exists with email" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.findAllByIdentifier("unknown@example.com"))
+        .thenReturn(Future.successful(Right(List.empty)))
+
+      val result = service.getShoppingLists("unknown@example.com").futureValue
+
+      result shouldBe Right(List.empty)
+    }
+  }
+
   "create" should {
 
     "return Right with new shopping list on success" in {

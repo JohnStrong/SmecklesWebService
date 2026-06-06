@@ -73,4 +73,27 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     }
   }
 
+  "findAllByIdentifier" should {
+    "return Right with list of shopping lists for an existing email" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val result = repository.findAllByIdentifier(shoppingList.email).futureValue
+
+      result.value should have length 1
+      result.value.head shouldBe shoppingList
+    }
+
+    "return Right with empty list when no customer exists with email" in {
+      val result = repository.findAllByIdentifier("nonexistent@example.com").futureValue
+
+      result.value shouldBe empty
+    }
+
+    "return Right with empty list when customer exists but has no shopping lists" in withCustomer {
+      val result = repository.findAllByIdentifier(shoppingList.email).futureValue
+
+      result.value shouldBe empty
+    }
+  }
+
 }
