@@ -3,6 +3,7 @@ package auth
 import com.auth0.jwk.JwkProvider
 import com.auth0.jwk.UrlJwkProvider
 
+import java.net.URI
 import javax.inject.{Inject, Singleton}
 
 /**
@@ -25,6 +26,6 @@ trait JwkProviderFactory {
 @Singleton
 class GoogleJwkProviderFactory @Inject()() extends JwkProviderFactory {
   override def create(): JwkProvider = new UrlJwkProvider(
-    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+    URI("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com").toURL
   )
 }
