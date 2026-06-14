@@ -759,65 +759,78 @@ This section captures the concrete config and code changes required to go from t
 
 ---
 
-##### Phase 1.1: Dockerfile & Packaging
+##### Phase 1.1: Health Check Endpoint
 
-**Plain English:** We need to package the Play app into a Docker image that Cloud Run can run. We use a two-stage build — stage 1 compiles the code using a full JDK+sbt image, stage 2 copies just the compiled output into a tiny JRE-only image (~80MB). This keeps the deployed image small and secure (no build tools in production).
+**Plain English:** A simple endpoint that Cloud Run (and you) can hit to confirm the app is alive and ready. Also serves as a smoke test that your test harness is working before you tackle the auth handler.
 
-The Play sbt-plugin already includes sbt-native-packager, so `sbt stage` produces a self-contained distribution (launcher script + all JARs) in `target/universal/stage/` — no extra plugins needed.
+- [ ] **Add route to `conf/routes`**
 
-- [ ] **Create `Dockerfile`**
-
-```dockerfile
-# Stage 1: Compile with full build toolchain (discarded after build)
-FROM sbtscala/scala-sbt:eclipse-temurin-21.0.6_7_1.10.11_3.3.7 AS builder
-WORKDIR /app
-
-# Deps layer — cached until build.sbt or project/ changes
-COPY build.sbt build.sbt
-COPY project/  project/
-RUN sbt update
-
-# Source layer — rebuilds on code changes only
-COPY app/    app/
-COPY conf/   conf/
-COPY public/ public/
-RUN sbt stage
-
-# Stage 2: Minimal runtime (JRE only, no sbt/JDK/source)
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
-COPY --from=builder /app/target/universal/stage/ .
-EXPOSE 9000
-ENTRYPOINT ["bin/simpleshoppinglistapp", "-Dhttp.port=9000", "-J-Xmx256m"]
+```routes
+GET     /health     controllers.HealthController.check()
 ```
 
-**Key points:**
-- Dependencies are cached in a separate Docker layer — code changes don't re-download the internet
-- `-J-Xmx256m` caps heap at 256MB (container gets 512Mi total; leaves ~256MB for JVM metaspace, thread stacks, and off-heap). A minimal Play 3 app idles at ~150MB heap — 256MB gives comfortable headroom for 5–10 requests/week without over-provisioning.
-- No `-Dplay.http.secret.key` here — it comes from the `APPLICATION_SECRET` env var at runtime (see Phase 1.2)
+- [ ] **Create `app/controllers/HealthController.scala`** — returns `Ok("ok")`
 
-- [ ] **Create `.dockerignore`**
+- [ ] **Unit test** — verify the controller returns 200 with body "ok"
 
-```dockerignore
-.git/
-target/
-.idea/
-.bsp/
-*.log
-node_modules/
+- [ ] **Functional test** — boot the full app, `GET /health` → assert 200
+
+---
+
+##### Phase 1.2: Firebase Auth Token Verification
+
+**Plain English:** The frontend signs in with Google via Firebase Auth and gets an ID token (a signed JWT). It sends this as `Authorization: Bearer <token>` on every API call. The backend verifies the token is genuine by checking its signature against Google's public keys, confirming the issuer/audience match your Firebase project, and rejecting expired tokens. This is standard JWT verification — no Firebase Admin SDK needed on the backend.
+
+- [ ] **Add dependencies to `build.sbt`**
+
+```scala
+"com.auth0" % "java-jwt" % "4.4.0",   // JWT decode + verify
+"com.auth0" % "jwks-rsa" % "0.22.1"   // Fetches Google's public signing keys
 ```
 
-- [ ] **Verify locally**
+- [ ] **Create `app/auth/AuthenticatedAction.scala`**
 
-```bash
-sbt stage
-./target/universal/stage/bin/simpleshoppinglistapp -Dhttp.port=9000
-# → http://localhost:9000/api/v1/customers should respond
+A Play `ActionBuilder` that:
+1. Extracts Bearer token from the `Authorization` header
+2. Uses `UrlJwkProvider` to fetch keys from `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`
+3. Verifies with `JWT.require(Algorithm.RSA256(publicKey, null))` — checking issuer (`https://securetoken.google.com/<projectId>`) and audience (`<projectId>`)
+4. Extracts `sub` (Firebase UID) and `email` claim from verified token
+5. Returns `401` if token is missing or invalid
+
+Wrap into an `AuthenticatedRequest[A]` that carries `userId` and `email` for controllers to use.
+
+- [ ] **Add config to `application.conf`**
+
+```hocon
+# Firebase project ID — used to validate token issuer and audience.
+# This is NOT a secret. Find it in Firebase Console → Project Settings → General.
+# Firebase projects ARE GCP projects — same project hosts Cloud Run, Auth, and Hosting.
+auth.firebase.projectId = "smeckles-app-11ca3"
+```
+
+- [ ] **Wire into controllers**
+
+Replace `Action.async` with `authenticated.async` on protected endpoints. Keep health check public.
+
+- [ ] **Unit tests** — mock the JWT verification layer; test that:
+  - Missing `Authorization` header → 401
+  - Malformed token → 401
+  - Valid token → request proceeds with correct `userId`/`email`
+
+- [ ] **Functional tests** — boot the full app; test that:
+  - `GET /health` still returns 200 (no auth required)
+  - Protected endpoints without token → 401
+  - Protected endpoints with a test token → pass through (use a self-signed test JWT or mock the JWKS provider in test config)
+
+**Frontend side** (for reference):
+```typescript
+const token = await getAuth().currentUser.getIdToken();
+fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
 ```
 
 ---
 
-##### Phase 1.2: Application Configuration for Cloud Run
+##### Phase 1.3: Application Configuration for Cloud Run
 
 **Plain English:** We need the app to work both locally (hardcoded dev values) and on Cloud Run (config from environment variables). Play's HOCON config supports `${?ENV_VAR}` syntax — "use this env var if set, otherwise fall through to the value above." We also add CORS (so the browser allows the frontend to call the API across domains) and a host header filter (rejects requests with spoofed `Host` headers).
 
@@ -854,65 +867,71 @@ play.filters.cors {
 
 > **Note on env vars and HOCON lists:** HOCON's `${?ENV_VAR}` substitutes a single string — it can't inject a list. Since your Firebase Hosting origins are known at build time (they're derived from the project name), just hardcode them. If you later need a custom domain, add it to this list and redeploy.
 
-- [ ] **Add health check endpoint**
+---
 
-Cloud Run pings this to know the container is ready. Add to `conf/routes`:
-```routes
-GET     /health     controllers.HealthController.check()
+##### Phase 1.4: Dockerfile & Packaging
+
+**Plain English:** We need to package the Play app into a Docker image that Cloud Run can run. We use a two-stage build — stage 1 compiles the code using a full JDK+sbt image, stage 2 copies just the compiled output into a tiny JRE-only image (~80MB). This keeps the deployed image small and secure (no build tools in production).
+
+The Play sbt-plugin already includes sbt-native-packager, so `sbt stage` produces a self-contained distribution (launcher script + all JARs) in `target/universal/stage/` — no extra plugins needed.
+
+- [ ] **Create `Dockerfile`**
+
+```dockerfile
+# Stage 1: Compile with full build toolchain (discarded after build)
+FROM sbtscala/scala-sbt:eclipse-temurin-21.0.6_7_1.10.11_3.3.7 AS builder
+WORKDIR /app
+
+# Deps layer — cached until build.sbt or project/ changes
+COPY build.sbt build.sbt
+COPY project/  project/
+RUN sbt update
+
+# Source layer — rebuilds on code changes only
+COPY app/    app/
+COPY conf/   conf/
+COPY public/ public/
+RUN sbt stage
+
+# Stage 2: Minimal runtime (JRE only, no sbt/JDK/source)
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=builder /app/target/universal/stage/ .
+EXPOSE 9000
+ENTRYPOINT ["bin/simpleshoppinglistapp", "-Dhttp.port=9000", "-J-Xmx256m"]
 ```
 
-Create `app/controllers/HealthController.scala` — a one-liner that returns `Ok("ok")`.
+**Key points:**
+- Dependencies are cached in a separate Docker layer — code changes don't re-download the internet
+- `-J-Xmx256m` caps heap at 256MB (container gets 512Mi total; leaves ~256MB for JVM metaspace, thread stacks, and off-heap). A minimal Play 3 app idles at ~150MB heap — 256MB gives comfortable headroom for 5–10 requests/week without over-provisioning.
+- No `-Dplay.http.secret.key` here — it comes from the `APPLICATION_SECRET` env var at runtime (see Phase 1.3)
+
+- [ ] **Create `.dockerignore`**
+
+```dockerignore
+.git/
+target/
+.idea/
+.bsp/
+*.log
+node_modules/
+```
+
+- [ ] **Verify locally**
+
+```bash
+sbt stage
+./target/universal/stage/bin/simpleshoppinglistapp -Dhttp.port=9000
+# → http://localhost:9000/health should respond 200
+```
 
 ---
 
-##### Phase 1.3: Firebase Auth Token Verification
-
-**Plain English:** The frontend signs in with Google via Firebase Auth and gets an ID token (a signed JWT). It sends this as `Authorization: Bearer <token>` on every API call. The backend verifies the token is genuine by checking its signature against Google's public keys, confirming the issuer/audience match your Firebase project, and rejecting expired tokens. This is standard JWT verification — no Firebase Admin SDK needed on the backend.
-
-- [ ] **Add dependencies to `build.sbt`**
-
-```scala
-"com.auth0" % "java-jwt" % "4.4.0",   // JWT decode + verify
-"com.auth0" % "jwks-rsa" % "0.22.1"   // Fetches Google's public signing keys
-```
-
-- [ ] **Create `app/auth/AuthenticatedAction.scala`**
-
-A Play `ActionBuilder` that:
-1. Extracts Bearer token from the `Authorization` header
-2. Uses `UrlJwkProvider` to fetch keys from `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`
-3. Verifies with `JWT.require(Algorithm.RSA256(publicKey, null))` — checking issuer (`https://securetoken.google.com/<projectId>`) and audience (`<projectId>`)
-4. Extracts `sub` (Firebase UID) and `email` claim from verified token
-5. Returns `401` if token is missing or invalid
-
-Wrap into an `AuthenticatedRequest[A]` that carries `userId` and `email` for controllers to use.
-
-- [ ] **Add config to `application.conf`**
-
-```hocon
-# Firebase project ID — used to validate token issuer and audience.
-# This is NOT a secret. Find it in Firebase Console → Project Settings → General.
-# Firebase projects ARE GCP projects — same project hosts Cloud Run, Auth, and Hosting.
-auth.firebase.projectId = "smeckles-app-11ca3"
-```
-
-- [ ] **Wire into controllers**
-
-Replace `Action.async` with `authenticated.async` on protected endpoints. Keep health check public.
-
-**Frontend side** (for reference):
-```typescript
-const token = await getAuth().currentUser.getIdToken();
-fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
-```
-
----
-
-##### Phase 1.4: GCP Setup & Deploy (H2 Mode)
+##### Phase 1.5: GCP Setup & Deploy (H2 Mode)
 
 **Plain English:** We set up a GCP project, store the Play app secret securely in Secret Manager, create a least-privilege service account for the container, and deploy. Cloud Run builds the Docker image for us (via Cloud Build from the Dockerfile) and runs it as a serverless container. The `--max-instances 1` flag keeps H2 state consistent (one instance = one in-memory DB).
 
-- [ ] **Enable APIs and create project**
+- [ ] **Enable APIs**
 
 ```bash
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
@@ -932,7 +951,7 @@ gcloud iam service-accounts create smeckles-api \
   --display-name="Smeckles API"
 
 gcloud secrets add-iam-policy-binding play-app-secret \
-  --member="serviceAccount:smeckles-api@YOUR_PROJECT.iam.gserviceaccount.com" \
+  --member="serviceAccount:smeckles-api@smeckles-app-11ca3.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
 
@@ -945,7 +964,7 @@ gcloud run deploy smeckles-api \
   --memory 512Mi --cpu 1 \
   --max-instances 1 --min-instances 0 \
   --set-secrets "APPLICATION_SECRET=play-app-secret:latest" \
-  --service-account smeckles-api@YOUR_PROJECT.iam.gserviceaccount.com \
+  --service-account smeckles-api@smeckles-app-11ca3.iam.gserviceaccount.com \
   --allow-unauthenticated \
   --port 9000 \
   --timeout 60
@@ -974,7 +993,7 @@ gcloud billing budgets create \
 
 ---
 
-##### Phase 1.5: Verification
+##### Phase 1.6: Verification
 
 ```bash
 # Get the service URL
@@ -1118,11 +1137,12 @@ time curl $SERVICE_URL/health
 | Phase | Effort | Dependencies |
 |-------|--------|--------------|
 | **Milestone 1** | | |
-| Phase 1.1: Dockerfile & Packaging | ~1–2 hours | None |
-| Phase 1.2: App Config for Cloud Run | ~30 min | None |
-| Phase 1.3: Firebase Auth | ~2 hours | Firebase project |
-| Phase 1.4: GCP Setup & Deploy | ~1 hour | GCP account with billing |
-| Phase 1.5: Verification | ~30 min | Phases 1.1–1.4 complete |
+| Phase 1.1: Health Check | ~30 min | None |
+| Phase 1.2: Firebase Auth | ~2–3 hours | Firebase project |
+| Phase 1.3: App Config (CORS, hosts, secret) | ~30 min | None |
+| Phase 1.4: Dockerfile & Packaging | ~1 hour | None |
+| Phase 1.5: GCP Setup & Deploy | ~1 hour | GCP account with billing |
+| Phase 1.6: Verification | ~30 min | Phases 1.1–1.5 complete |
 | **Milestone 1 Total** | **~5–6 hours** | |
 | | | |
 | **Milestone 2** | | |
