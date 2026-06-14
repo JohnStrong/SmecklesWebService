@@ -1062,6 +1062,7 @@ gcloud run deploy smeckles-api \
 | `--max-instances 1` | One container = one H2 DB = consistent state |
 | `--min-instances 0` | Scale to zero when idle (free) |
 | `--set-secrets` | Injects Secret Manager value as env var at startup |
+| `--service-account` | Run as our dedicated least-privilege service account (only permission: read secrets) |
 | `--allow-unauthenticated` | Public URL — auth is handled at the app layer (Firebase token check) |
 | `--timeout 60` | Kills requests >60s — prevents resource exhaustion |
 
