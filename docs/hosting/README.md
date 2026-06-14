@@ -26,6 +26,8 @@
   - [Risk Register](#risk-register)
   - [Blockers](#blockers-must-complete-before-first-deploy)
   - [Delivery Plan](#delivery-plan)
+    - [Milestone 1: Deploy with H2 In-Memory](#milestone-1-deploy-with-h2-in-memory-validate-deployment--frontend-integration)
+    - [Milestone 2: Production Persistence (Cloud Run + Neon)](#milestone-2-production-persistence-cloud-run--neon-postgresql)
   - [Estimated Effort](#estimated-effort)
 
 ---
@@ -277,7 +279,7 @@ For a single Cloud Run instance with a JVM/Play Framework service:
 | Setting | Recommended | Max supported |
 |---------|-------------|---------------|
 | vCPU | 1 | 8 |
-| Memory | 512 MiB – 1 GiB | 32 GiB |
+| Memory | 512 MiB | 32 GiB |
 | Concurrency | 80 (Play is async, handles many concurrent requests) | 1000 |
 | Request timeout | 300s (default) | 3600s |
 | Min instances | 0 (scale to zero) | — |
@@ -286,7 +288,7 @@ For a single Cloud Run instance with a JVM/Play Framework service:
 **JVM considerations:**
 - Cold start: ~5–10s (JVM boot + Play init). Acceptable at your traffic level.
 - If cold starts become annoying, set `min-instances=1` (costs ~$5/month idle).
-- Set container memory ≥ 512 MiB for a JVM workload. 1 GiB is comfortable.
+- 512 MiB container memory is sufficient for a low-traffic Play 3 app (256MB heap + 256MB JVM overhead). Bump to 768Mi–1GiB if you add heavy caching or concurrent load grows.
 - Use `-XX:+UseContainerSupport` (default in modern JDKs) so the JVM respects container memory limits.
 
 **Neon connection limits (Free plan):**
@@ -744,7 +746,300 @@ This section captures the concrete config and code changes required to go from t
 
 ### Delivery Plan
 
-#### Phase 1: Production Configuration & Packaging
+---
+
+#### Milestone 1: Deploy with H2 In-Memory (Validate Deployment + Frontend Integration)
+
+**Goal:** Get the service running on Cloud Run with the existing H2 in-memory configuration. Validates the full deployment pipeline, network accessibility, and enables UI ↔ service ↔ persistence (e2e) integration testing. Data persists for the lifetime of the container instance — acceptable for this phase.
+
+**Unblocks (can run concurrently with Milestone 2):**
+- Frontend → service API integration coding and testing
+- Firebase Auth token flow validation
+- CORS and networking verification
+
+---
+
+##### Phase 1.1: Dockerfile & Packaging
+
+**Plain English:** We need to package the Play app into a Docker image that Cloud Run can run. We use a two-stage build — stage 1 compiles the code using a full JDK+sbt image, stage 2 copies just the compiled output into a tiny JRE-only image (~80MB). This keeps the deployed image small and secure (no build tools in production).
+
+The Play sbt-plugin already includes sbt-native-packager, so `sbt stage` produces a self-contained distribution (launcher script + all JARs) in `target/universal/stage/` — no extra plugins needed.
+
+- [ ] **Create `Dockerfile`**
+
+```dockerfile
+# Stage 1: Compile with full build toolchain (discarded after build)
+FROM sbtscala/scala-sbt:eclipse-temurin-21.0.6_7_1.10.11_3.3.7 AS builder
+WORKDIR /app
+
+# Deps layer — cached until build.sbt or project/ changes
+COPY build.sbt build.sbt
+COPY project/  project/
+RUN sbt update
+
+# Source layer — rebuilds on code changes only
+COPY app/    app/
+COPY conf/   conf/
+COPY public/ public/
+RUN sbt stage
+
+# Stage 2: Minimal runtime (JRE only, no sbt/JDK/source)
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=builder /app/target/universal/stage/ .
+EXPOSE 9000
+ENTRYPOINT ["bin/simpleshoppinglistapp", "-Dhttp.port=9000", "-J-Xmx256m"]
+```
+
+**Key points:**
+- Dependencies are cached in a separate Docker layer — code changes don't re-download the internet
+- `-J-Xmx256m` caps heap at 256MB (container gets 512Mi total; leaves ~256MB for JVM metaspace, thread stacks, and off-heap). A minimal Play 3 app idles at ~150MB heap — 256MB gives comfortable headroom for 5–10 requests/week without over-provisioning.
+- No `-Dplay.http.secret.key` here — it comes from the `APPLICATION_SECRET` env var at runtime (see Phase 1.2)
+
+- [ ] **Create `.dockerignore`**
+
+```dockerignore
+.git/
+target/
+.idea/
+.bsp/
+*.log
+node_modules/
+```
+
+- [ ] **Verify locally**
+
+```bash
+sbt stage
+./target/universal/stage/bin/simpleshoppinglistapp -Dhttp.port=9000
+# → http://localhost:9000/api/v1/customers should respond
+```
+
+---
+
+##### Phase 1.2: Application Configuration for Cloud Run
+
+**Plain English:** We need the app to work both locally (hardcoded dev values) and on Cloud Run (config from environment variables). Play's HOCON config supports `${?ENV_VAR}` syntax — "use this env var if set, otherwise fall through to the value above." We also add CORS (so the browser allows the frontend to call the API across domains) and a host header filter (rejects requests with spoofed `Host` headers).
+
+- [ ] **Add to `conf/application.conf`**
+
+```hocon
+# App secret — "changeme" for local dev, overridden by env var on Cloud Run
+play.http.secret.key = "changeme"
+play.http.secret.key = ${?APPLICATION_SECRET}
+
+# Host header filter — rejects requests not targeting these hosts
+play.filters.hosts.allowed = ["localhost", ".run.app"]
+
+# CORS — allows the frontend (different origin) to call the API.
+# Without this, the browser blocks your frontend from making fetch() calls to the API
+# because they're on different domains.
+#
+# Firebase Hosting URL for project "smeckles-app-11ca3" will be:
+#   https://smeckles-app-11ca3.web.app       (primary)
+#   https://smeckles-app-11ca3.firebaseapp.com (legacy alias — also works)
+#
+# We hardcode both plus localhost for dev. No env var needed — these are known at build time.
+play.filters.enabled += "play.filters.cors.CORSFilter"
+play.filters.cors {
+  allowedOrigins = [
+    "http://localhost:3000",                         # local frontend dev server
+    "https://smeckles-app-11ca3.web.app",           # Firebase Hosting (primary)
+    "https://smeckles-app-11ca3.firebaseapp.com"    # Firebase Hosting (legacy alias)
+  ]
+  allowedHttpMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allowedHttpHeaders = ["Authorization", "Content-Type"]
+}
+```
+
+> **Note on env vars and HOCON lists:** HOCON's `${?ENV_VAR}` substitutes a single string — it can't inject a list. Since your Firebase Hosting origins are known at build time (they're derived from the project name), just hardcode them. If you later need a custom domain, add it to this list and redeploy.
+
+- [ ] **Add health check endpoint**
+
+Cloud Run pings this to know the container is ready. Add to `conf/routes`:
+```routes
+GET     /health     controllers.HealthController.check()
+```
+
+Create `app/controllers/HealthController.scala` — a one-liner that returns `Ok("ok")`.
+
+---
+
+##### Phase 1.3: Firebase Auth Token Verification
+
+**Plain English:** The frontend signs in with Google via Firebase Auth and gets an ID token (a signed JWT). It sends this as `Authorization: Bearer <token>` on every API call. The backend verifies the token is genuine by checking its signature against Google's public keys, confirming the issuer/audience match your Firebase project, and rejecting expired tokens. This is standard JWT verification — no Firebase Admin SDK needed on the backend.
+
+- [ ] **Add dependencies to `build.sbt`**
+
+```scala
+"com.auth0" % "java-jwt" % "4.4.0",   // JWT decode + verify
+"com.auth0" % "jwks-rsa" % "0.22.1"   // Fetches Google's public signing keys
+```
+
+- [ ] **Create `app/auth/AuthenticatedAction.scala`**
+
+A Play `ActionBuilder` that:
+1. Extracts Bearer token from the `Authorization` header
+2. Uses `UrlJwkProvider` to fetch keys from `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`
+3. Verifies with `JWT.require(Algorithm.RSA256(publicKey, null))` — checking issuer (`https://securetoken.google.com/<projectId>`) and audience (`<projectId>`)
+4. Extracts `sub` (Firebase UID) and `email` claim from verified token
+5. Returns `401` if token is missing or invalid
+
+Wrap into an `AuthenticatedRequest[A]` that carries `userId` and `email` for controllers to use.
+
+- [ ] **Add config to `application.conf`**
+
+```hocon
+# Firebase project ID — used to validate token issuer and audience.
+# This is NOT a secret. Find it in Firebase Console → Project Settings → General.
+# Firebase projects ARE GCP projects — same project hosts Cloud Run, Auth, and Hosting.
+auth.firebase.projectId = "smeckles-app-11ca3"
+```
+
+- [ ] **Wire into controllers**
+
+Replace `Action.async` with `authenticated.async` on protected endpoints. Keep health check public.
+
+**Frontend side** (for reference):
+```typescript
+const token = await getAuth().currentUser.getIdToken();
+fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
+```
+
+---
+
+##### Phase 1.4: GCP Setup & Deploy (H2 Mode)
+
+**Plain English:** We set up a GCP project, store the Play app secret securely in Secret Manager, create a least-privilege service account for the container, and deploy. Cloud Run builds the Docker image for us (via Cloud Build from the Dockerfile) and runs it as a serverless container. The `--max-instances 1` flag keeps H2 state consistent (one instance = one in-memory DB).
+
+- [ ] **Enable APIs and create project**
+
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
+  secretmanager.googleapis.com artifactregistry.googleapis.com
+```
+
+- [ ] **Store app secret in Secret Manager**
+
+```bash
+printf "$(openssl rand -base64 64)" | gcloud secrets create play-app-secret --data-file=-
+```
+
+- [ ] **Create service account with minimal permissions**
+
+```bash
+gcloud iam service-accounts create smeckles-api \
+  --display-name="Smeckles API"
+
+gcloud secrets add-iam-policy-binding play-app-secret \
+  --member="serviceAccount:smeckles-api@YOUR_PROJECT.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+- [ ] **Deploy**
+
+```bash
+gcloud run deploy smeckles-api \
+  --source . \
+  --region europe-west1 \
+  --memory 512Mi --cpu 1 \
+  --max-instances 1 --min-instances 0 \
+  --set-secrets "APPLICATION_SECRET=play-app-secret:latest" \
+  --service-account smeckles-api@YOUR_PROJECT.iam.gserviceaccount.com \
+  --allow-unauthenticated \
+  --port 9000 \
+  --timeout 60
+```
+
+| Flag | Why |
+|------|-----|
+| `--source .` | Builds the Dockerfile via Cloud Build — no local Docker push needed |
+| `--max-instances 1` | One container = one H2 DB = consistent state |
+| `--min-instances 0` | Scale to zero when idle (free) |
+| `--set-secrets` | Injects Secret Manager value as env var at startup |
+| `--allow-unauthenticated` | Public URL — auth is handled at the app layer (Firebase token check) |
+| `--timeout 60` | Kills requests >60s — prevents resource exhaustion |
+
+- [ ] **Configure budget alert**
+
+```bash
+gcloud billing budgets create \
+  --billing-account=YOUR_BILLING_ACCOUNT_ID \
+  --display-name="Smeckles safety net" \
+  --budget-amount=1.00USD \
+  --threshold-rule=percent=0.5 \
+  --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0
+```
+
+---
+
+##### Phase 1.5: Verification
+
+```bash
+# Get the service URL
+SERVICE_URL=$(gcloud run services describe smeckles-api \
+  --region europe-west1 --format='value(status.url)')
+
+# 1. Health check (public, no auth)
+curl $SERVICE_URL/health
+# → 200 ok
+
+# 2. Unauthenticated request to protected endpoint
+curl $SERVICE_URL/api/v1/customers/test@example.com
+# → 401 {"error":"..."}
+
+# 3. Authenticated request (paste a real Firebase token)
+curl -H "Authorization: Bearer $TOKEN" \
+  $SERVICE_URL/api/v1/customers/test@example.com
+# → 200 or 404 (not 401)
+
+# 4. Create + retrieve (confirms H2 persists within instance)
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}' \
+  $SERVICE_URL/api/v1/customers
+
+curl -H "Authorization: Bearer $TOKEN" \
+  $SERVICE_URL/api/v1/customers/test@example.com
+# → 200 {"email":"test@example.com"}
+
+# 5. Cold start — wait 15+ min, then:
+time curl $SERVICE_URL/health
+# → ~5-10s (JVM boot). Data from step 4 is gone (expected with H2).
+```
+
+**Frontend check:** Sign in on the web app, trigger an API call, confirm no CORS errors in browser console and data round-trips correctly.
+
+---
+
+##### Milestone 1 — Acceptance Criteria
+
+| Criterion | How to verify |
+|-----------|---------------|
+| Service accessible on Cloud Run | `curl /health` → 200 |
+| Auth working end-to-end | Frontend sign-in → Bearer token → API responds |
+| CORS configured | Browser fetch from frontend origin succeeds |
+| Data persists within instance lifetime | Create customer → get customer (same instance) |
+| Cost = $0 | GCP billing dashboard after 1 week |
+
+##### Milestone 1 — Known Limitations (Accepted)
+
+| Limitation | Impact | Resolved in |
+|------------|--------|-------------|
+| Data lost on cold start / redeploy | Acceptable for integration testing | Milestone 2 (Neon) |
+| Single instance only | No HA — fine for personal dev | Milestone 2 |
+| No persistent storage | Cannot demo to others with long-lived data | Milestone 2 |
+
+---
+
+#### Milestone 2: Production Persistence (Cloud Run + Neon PostgreSQL)
+
+**Goal:** Replace H2 with Neon serverless PostgreSQL for durable persistence. Can be developed concurrently with frontend work unblocked by Milestone 1.
+
+**Prerequisites:** Milestone 1 deployed and verified. Neon account created.
+
+##### Phase 2.1: Production Configuration
 
 - [ ] **Create `conf/production.conf`**
   - Slick profile → `PostgresProfile$`, driver → `org.postgresql.Driver`
@@ -754,81 +1049,51 @@ This section captures the concrete config and code changes required to go from t
   - `play.filters.hosts.allowed = [".run.app"]`
   - `play.evolutions.db.default.autoApply = true` (bootstrap only)
 
-- [ ] **Add health check endpoint**
-  - `GET /health` → `Ok("ok")` controller + route entry
-  - Used by Cloud Run startup/liveness probes
-
 - [ ] **Verify evolution SQL is PostgreSQL-compatible**
   - Review `conf/evolutions/default/1.sql` for H2-only syntax
   - Test against a local PostgreSQL or Neon dev branch
 
-- [ ] **Create `Dockerfile`**
-  - Base: `eclipse-temurin:21-jre-alpine`
-  - Copy `target/universal/stage/`
-  - Entrypoint with `-Dconfig.resource=production.conf`, JVM container flags
-  - Expose port 9000
+- [ ] **Update Dockerfile entrypoint** to use `-Dconfig.resource=production.conf`
 
-- [ ] **Create `.dockerignore`**
-  - Exclude `.git`, `target`, `.idea`, `*.log`, `node_modules`
-
-- [ ] **Verify `sbt stage` produces a runnable distribution**
-  - Run locally, confirm `target/universal/stage/bin/<app>` starts with production.conf
-
-#### Phase 2: Neon Database Setup
+##### Phase 2.2: Neon Database Setup
 
 - [ ] **Create Neon project in `eu-central-1`**
   - Note the pooled connection string (`-pooler.*.neon.tech`)
   - Create a dedicated role with least-privilege (`SELECT`, `INSERT`, `UPDATE`, `DELETE` on app tables only)
 
 - [ ] **Test Neon connectivity locally**
-  - Point local Play app at Neon pooled endpoint (temporary override in `application.conf` or `-D` flag)
+  - Point local Play app at Neon pooled endpoint (temporary override via `-D` flag)
   - Confirm evolutions apply cleanly and CRUD operations work
 
 - [ ] **Create a Neon dev branch (optional but recommended)**
   - Use for testing schema migrations before applying to main branch
 
-#### Phase 3: GCP Project & Secret Setup
+##### Phase 2.3: Secrets & Redeploy
 
-- [ ] **Create or select GCP project**
-  - Enable Cloud Run, Secret Manager, Cloud Build APIs
-
-- [ ] **Create dedicated service account** (`smeckles-api@<project>.iam.gserviceaccount.com`)
-  - Grant `roles/secretmanager.secretAccessor` only
-
-- [ ] **Store secrets in Secret Manager**
+- [ ] **Store DB secrets in Secret Manager**
   - `db-url` — full JDBC pooled connection string with `?sslmode=require`
   - `db-user` — Neon role username
   - `db-password` — Neon role password
-  - `app-secret` — Play application secret (64-byte random, base64)
 
-- [ ] **Configure GCP budget alert**
-  - Budget: $1.00/month
-  - Thresholds: 50%, 90%, 100%
-  - Notification: billing admins email
+- [ ] **Redeploy to Cloud Run with DB secrets**
+  ```bash
+  gcloud run deploy smeckles-api \
+    --source . \
+    --region europe-west1 \
+    --memory 1Gi --cpu 1 \
+    --max-instances 1 --min-instances 0 \
+    --set-secrets "DB_URL=db-url:latest,DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,APPLICATION_SECRET=play-app-secret:latest" \
+    --service-account smeckles-api@YOUR_PROJECT.iam.gserviceaccount.com \
+    --allow-unauthenticated \
+    --port 9000 \
+    --timeout 60
+  ```
 
-#### Phase 4: Deploy to Cloud Run
+- [ ] **Verify deployment with Neon**
+  - CRUD operations persist across cold starts
+  - Confirm Neon wake-up latency is acceptable (~500ms)
 
-- [ ] **Deploy via `gcloud run deploy`**
-  - `--source .` (Cloud Build builds the Docker image)
-  - `--region europe-west1`
-  - `--memory 1Gi`, `--cpu 1`
-  - `--max-instances 1`, `--min-instances 0`
-  - `--set-secrets` for all four secrets
-  - `--service-account` pinned to dedicated SA
-  - `--allow-unauthenticated`
-  - `--port 9000`
-  - `--timeout 60` (reduce from default 300s)
-
-- [ ] **Verify deployment**
-  - `curl <service-url>/health` → 200
-  - `curl <service-url>/api/v1/customers` → 200 (empty list or seeded data)
-  - Check Cloud Run logs for clean startup
-
-- [ ] **Verify cold start behaviour**
-  - Wait >5 min, hit the service, confirm response within ~10s
-  - Confirm Neon wakes correctly (check Neon dashboard activity)
-
-#### Phase 5: Post-Deploy Hardening
+##### Phase 2.4: Post-Deploy Hardening
 
 - [ ] **Switch `play.evolutions.db.default.autoApply` to `false`**
   - After initial schema is bootstrapped, disable auto-apply
@@ -844,7 +1109,6 @@ This section captures the concrete config and code changes required to go from t
 - [ ] **Consider future enhancements (backlog, not blocking)**
   - Automated secret rotation via Cloud Function + Cloud Scheduler
   - Custom domain (map via Cloud Run domain mapping)
-  - Frontend (Firebase Hosting) → Cloud Run CORS configuration
   - Cloud Armor rate limiting if publicly listed
 
 ---
@@ -853,9 +1117,19 @@ This section captures the concrete config and code changes required to go from t
 
 | Phase | Effort | Dependencies |
 |-------|--------|--------------|
-| Phase 1: Config & Packaging | ~2–3 hours | None |
-| Phase 2: Neon Setup | ~1 hour | Neon account |
-| Phase 3: GCP & Secrets | ~1 hour | GCP account with billing |
-| Phase 4: Deploy | ~1–2 hours | Phases 1–3 complete |
-| Phase 5: Hardening | ~1 hour | Phase 4 complete |
-| **Total** | **~6–8 hours** | — |
+| **Milestone 1** | | |
+| Phase 1.1: Dockerfile & Packaging | ~1–2 hours | None |
+| Phase 1.2: App Config for Cloud Run | ~30 min | None |
+| Phase 1.3: Firebase Auth | ~2 hours | Firebase project |
+| Phase 1.4: GCP Setup & Deploy | ~1 hour | GCP account with billing |
+| Phase 1.5: Verification | ~30 min | Phases 1.1–1.4 complete |
+| **Milestone 1 Total** | **~5–6 hours** | |
+| | | |
+| **Milestone 2** | | |
+| Phase 2.1: Production Config | ~1 hour | Milestone 1 complete |
+| Phase 2.2: Neon Setup | ~1 hour | Neon account |
+| Phase 2.3: Secrets & Redeploy | ~1 hour | Phases 2.1–2.2 complete |
+| Phase 2.4: Hardening | ~1 hour | Phase 2.3 complete |
+| **Milestone 2 Total** | **~4 hours** | |
+| | | |
+| **Grand Total** | **~9–10 hours** | — |
