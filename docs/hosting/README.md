@@ -910,7 +910,11 @@ fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
 # App secret — Play uses this to sign session cookies and CSRF tokens.
 # Play refuses to start in production mode without a real (non-default) value.
 # "changeme" is fine for local dev (dev mode skips the check).
-# On Cloud Run, the APPLICATION_SECRET env var (from Secret Manager) overrides it.
+#
+# On Cloud Run, this is injected as an environment variable at container startup:
+#   1. You create a random secret in Google Secret Manager (one-time setup, see Phase 1.5)
+#   2. The deploy command maps it to the APPLICATION_SECRET env var via --set-secrets
+#   3. Play reads the env var below and uses it instead of "changeme"
 play.http.secret.key = "changeme"
 play.http.secret.key = ${?APPLICATION_SECRET}
 
@@ -1013,22 +1017,31 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
 
 - [ ] **Store app secret in Secret Manager**
 
+This creates a random value and stores it under the name `play-app-secret` in Google Secret Manager. The name is arbitrary — it's just a label you reference later in the deploy command. The value itself is a random 64-byte string that Play will use as its signing key.
+
 ```bash
+# Generate a random secret and store it (one-time setup)
 printf "$(openssl rand -base64 64)" | gcloud secrets create play-app-secret --data-file=-
 ```
 
-- [ ] **Create service account with minimal permissions**
+- [ ] **Create service account and grant it access to the secret**
+
+Cloud Run containers run as a service account (like a "robot user"). We create a dedicated one with only the permission to read secrets — nothing else. This way, even if the container is compromised, the attacker can only read this one secret.
 
 ```bash
+# Create the service account
 gcloud iam service-accounts create smeckles-api \
   --display-name="Smeckles API"
 
+# Grant it permission to read the play-app-secret (and only that secret)
 gcloud secrets add-iam-policy-binding play-app-secret \
   --member="serviceAccount:smeckles-api@smeckles-app-11ca3.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
 
 - [ ] **Deploy**
+
+The `--set-secrets` flag tells Cloud Run: "before starting the container, fetch the secret named `play-app-secret` from Secret Manager and inject it as the environment variable `APPLICATION_SECRET`." Your app then reads it via `play.http.secret.key = ${?APPLICATION_SECRET}` in `application.conf`.
 
 ```bash
 gcloud run deploy smeckles-api \
