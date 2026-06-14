@@ -1,5 +1,35 @@
 # Service & Persistence Hosting Evaluation
 
+## Table of Contents
+
+- [Context](#context)
+- [Service Hosting (Scala/Play on JVM)](#service-hosting-scalaplay-on-jvm)
+- [Persistence Options](#persistence-options)
+- [Comparison Matrix](#comparison-matrix)
+- [Recommendation](#recommendation)
+- [Architecture (Cloud Run + Neon)](#architecture-cloud-run--neon)
+- [Next Steps](#next-steps)
+- [Deep Dive: Cloud Run + Neon](#deep-dive-cloud-run--neon)
+  - [Cost Breakdown](#cost-breakdown)
+  - [Billing & Budget Alerts](#billing--budget-alerts)
+  - [Single Instance Scale](#single-instance-scale)
+  - [Deployment Steps](#deployment-steps)
+  - [Summary](#summary)
+- [Securing Cloud Run → Neon Connectivity](#securing-cloud-run--neon-connectivity)
+  - [Options Evaluated](#options-evaluated)
+  - [Option 1: Secret Manager + Password Auth](#option-1-secret-manager--password-auth-recommended-start)
+  - [Option 3: Automated Rotation (Future)](#option-3-automated-rotation-future-upgrade)
+  - [Additional Hardening](#additional-hardening-low-effort)
+  - [Decision Summary](#decision-summary)
+- [Design: Implementation Plan for Cloud Run + Neon Deployment](#design-implementation-plan-for-cloud-run--neon-deployment)
+  - [High-Level Changes Required](#high-level-changes-required)
+  - [Risk Register](#risk-register)
+  - [Blockers](#blockers-must-complete-before-first-deploy)
+  - [Delivery Plan](#delivery-plan)
+  - [Estimated Effort](#estimated-effort)
+
+---
+
 ## Context
 
 The Smeckles backend is a Scala Play Framework service currently using H2 in-memory for local/dev testing. This document evaluates options for hosting the service alongside a persistence layer within the same GCP/Firebase ecosystem as the frontend.
@@ -612,3 +642,220 @@ These are complementary measures regardless of which option you pick:
 | 🔄 Rotation story | Covered | Manual now (Option 1), automated later (Option 3) with no app code changes |
 
 **Bottom line:** You cannot IP-allowlist on Neon Free plan, but IAM-scoped secrets + TLS + least-privilege DB role is strong enough security for a personal project. The attack surface is: someone would need to compromise your GCP service account OR intercept a TLS 1.3 connection — both extremely unlikely for a personal app.
+
+---
+
+## Design: Implementation Plan for Cloud Run + Neon Deployment
+
+### Overview
+
+This section captures the concrete config and code changes required to go from the current local-dev H2 setup to a deployed Cloud Run service backed by Neon serverless PostgreSQL. It also identifies cost/availability risks and their mitigations.
+
+---
+
+### High-Level Changes Required
+
+#### Configuration Changes
+
+| File | Change | Purpose |
+|------|--------|---------|
+| `conf/production.conf` | **Create** — PostgresProfile, env-var-driven JDBC URL/creds, connection pool tuning | Production DB config |
+| `conf/application.conf` | **No change** — remains the local dev/H2 config | Keep dev workflow unchanged |
+| `build.sbt` | Add `sbt-native-packager` plugin (`PlayScala` already enables it) | Produce `sbt stage` artifact for Docker |
+| `project/plugins.sbt` | Possibly add Docker plugin if `PlayScala` doesn't cover `sbt stage` | Packaging |
+| `Dockerfile` | **Create** — Temurin 21 JRE Alpine, copies `target/universal/stage/`, runs with production.conf | Container image |
+| `.dockerignore` | **Create** — exclude `.git`, `target`, `.idea`, logs | Lean image |
+| `conf/evolutions/default/1.sql` | **Review** — ensure all DDL is PostgreSQL-compatible (no H2-only syntax) | Clean migration on Neon |
+| GCP Secret Manager | Store `DB_URL`, `DB_USER`, `DB_PASSWORD`, `APPLICATION_SECRET` | Secure credential delivery |
+| GCP Budget Alert | $1/month budget with 50%/90%/100% thresholds | Cost safety net |
+| Cloud Run service config | `--max-instances=1`, `--memory=1Gi`, `--cpu=1`, `--min-instances=0` | Hard compute ceiling |
+
+#### Code Changes
+
+| Area | Change | Purpose |
+|------|--------|---------|
+| `conf/production.conf` | HikariCP pool: `maxConnections=5`, `numThreads=5`, `connectionTimeout=5000` | Respect Neon free-tier 100 connection limit via pooler |
+| `app/Module.scala` | No change expected — DI bindings already wire Slick repos | — |
+| `conf/routes` | Add a `GET /health` → 200 OK endpoint | Cloud Run health check (required for min-instances / startup probe) |
+| Controller | Add `HealthController.scala` returning `Ok("ok")` | Liveness/readiness probe target |
+| `play.filters.hosts.allowed` | Set to `[".run.app"]` in production.conf | Reject requests with spoofed Host headers |
+
+---
+
+### Risk Register
+
+#### 1. Database Connection Exhaustion (billing + availability risk)
+
+| Aspect | Detail |
+|--------|--------|
+| **Risk** | Neon free-tier pooler allows 100 connections. If the app leaks connections or a traffic spike opens more than configured, Neon rejects new connections → 500 errors. On a paid plan, excess compute hours from sustained wake time directly increase the bill. |
+| **Likelihood** | Low (traffic is ~5–10 req/week), but misconfigured pool or connection leak makes it medium. |
+| **Impact** | Free plan: hard rejection (no cost, but service down). Paid plan: billing surprise from sustained compute. |
+| **Mitigation** | **🚫 BLOCKER — must implement before deploy:**<br>• HikariCP pool capped at `maxConnections=5` in `production.conf`<br>• Use Neon's **pooled endpoint** (`-pooler.*.neon.tech`) which adds PgBouncer in front<br>• Set `connectionTimeout=5000` so requests fail fast instead of queuing<br>• Set `idleTimeout=300000` and `maxLifetime=600000` to reclaim idle connections<br>• On paid plan: configure Neon's **consumption limit** (hard cap on CU-hours) |
+
+#### 2. Client → Server Request Abuse / Runaway Traffic (billing risk)
+
+| Aspect | Detail |
+|--------|--------|
+| **Risk** | The Cloud Run endpoint is publicly accessible. A bot, crawler, or accidental loop could generate thousands of requests, burning through the free tier (2M requests, 360k vCPU-seconds) and incurring charges. |
+| **Likelihood** | Low for a personal app with no public listing, but non-zero (bots scan `*.run.app` domains). |
+| **Impact** | Exceeding free tier → pay-per-use billing with no hard cap unless mitigated. |
+| **Mitigation** |<br>• **`--max-instances=1`** on Cloud Run — hard ceiling on compute. One instance can serve ~80 concurrent requests; beyond that, requests queue/fail rather than spawning new billable instances.<br>• **GCP Budget Alert at $1/month** — email notification at 50%/90%/100%.<br>• **Cloud Run request timeout = 60s** (reduce from 300s default) — prevents slow-loris style resource exhaustion.<br>• **Consider Cloud Armor or rate-limiting** in future if exposed publicly (adds cost, not needed at launch).<br>• **`play.filters.hosts.allowed`** — rejects requests not targeting your actual domain, blocking generic scanners. |
+
+#### 3. Neon Cold Start Latency (UX risk)
+
+| Aspect | Detail |
+|--------|--------|
+| **Risk** | Neon auto-suspends after 5 min of inactivity. First request after suspend adds ~500ms DB wake time on top of Cloud Run's ~5–10s JVM cold start. Total first-request latency: **~6–11 seconds**. |
+| **Likelihood** | High — at 5–10 requests/week, the service will almost always be cold. |
+| **Impact** | Poor first-request UX, not a cost risk. |
+| **Mitigation** |<br>• Accept it for now (personal project, not customer-facing).<br>• If UX matters: set Cloud Run `min-instances=1` (~$5/month) + Neon paid plan with always-on endpoint.<br>• Frontend can show a loading spinner / "waking up..." message. |
+
+#### 4. Uncontrolled Schema Migrations in Production (data risk)
+
+| Aspect | Detail |
+|--------|--------|
+| **Risk** | `play.evolutions.db.default.autoApply = true` in production means any code deploy with a new evolution file will immediately mutate the production schema — no review step. |
+| **Likelihood** | Medium (you will add evolutions as features grow). |
+| **Impact** | Destructive migration (e.g. `DROP COLUMN`) applied without confirmation → data loss. |
+| **Mitigation** |<br>• Set `autoApply = true` for initial deploy (bootstrapping), then switch to `autoApply = false` and apply evolutions manually via a deploy step or Neon's SQL console.<br>• Use Neon **branching** — create a branch, test evolution there, merge to main branch after verification. |
+
+#### 5. Secret / Credential Compromise (security risk)
+
+| Aspect | Detail |
+|--------|--------|
+| **Risk** | DB credentials stored in Secret Manager. If GCP service account is compromised, attacker gets full DB access. Neon free plan has no IP allowlisting. |
+| **Likelihood** | Very low for a single-user personal project. |
+| **Impact** | Full read/write access to production data. |
+| **Mitigation** |<br>• Dedicated least-privilege service account for Cloud Run (only `secretmanager.secretAccessor`).<br>• Least-privilege DB role: `SELECT, INSERT, UPDATE, DELETE` only — no `CREATE`, `DROP`, `SUPERUSER`.<br>• Rotate credentials every 90 days (manual initially, automated via Cloud Function later).<br>• `sslmode=require` on all JDBC connections. |
+
+---
+
+### Blockers (Must Complete Before First Deploy)
+
+| # | Item | Why it's blocking |
+|---|------|-------------------|
+| 1 | **Connection pool configuration in `production.conf`** | Without explicit HikariCP limits and the pooled Neon endpoint, the app could exhaust connections on the first concurrent burst, causing 500s and (on paid plan) billing spikes. |
+| 2 | **Use Neon pooler endpoint** | Direct connections bypass PgBouncer — ephemeral Cloud Run containers would leak connections on scale-down. Pooler is mandatory for serverless compute. |
+| 3 | **`--max-instances=1` on Cloud Run deploy** | Without this hard cap, a traffic spike could auto-scale to many instances, each with its own connection pool, compounding both compute cost and DB connection pressure. |
+| 4 | **GCP billing alert configured** | No automated spend cap exists on GCP. Budget alerts are the only notification mechanism before charges accumulate. |
+
+---
+
+### Delivery Plan
+
+#### Phase 1: Production Configuration & Packaging
+
+- [ ] **Create `conf/production.conf`**
+  - Slick profile → `PostgresProfile$`, driver → `org.postgresql.Driver`
+  - DB URL, user, password read from env vars (`${DB_URL}`, `${DB_USER}`, `${DB_PASSWORD}`)
+  - HikariCP pool: `maxConnections=5`, `numThreads=5`, `connectionTimeout=5000`, `idleTimeout=300000`, `maxLifetime=600000`
+  - `play.http.secret.key = ${APPLICATION_SECRET}`
+  - `play.filters.hosts.allowed = [".run.app"]`
+  - `play.evolutions.db.default.autoApply = true` (bootstrap only)
+
+- [ ] **Add health check endpoint**
+  - `GET /health` → `Ok("ok")` controller + route entry
+  - Used by Cloud Run startup/liveness probes
+
+- [ ] **Verify evolution SQL is PostgreSQL-compatible**
+  - Review `conf/evolutions/default/1.sql` for H2-only syntax
+  - Test against a local PostgreSQL or Neon dev branch
+
+- [ ] **Create `Dockerfile`**
+  - Base: `eclipse-temurin:21-jre-alpine`
+  - Copy `target/universal/stage/`
+  - Entrypoint with `-Dconfig.resource=production.conf`, JVM container flags
+  - Expose port 9000
+
+- [ ] **Create `.dockerignore`**
+  - Exclude `.git`, `target`, `.idea`, `*.log`, `node_modules`
+
+- [ ] **Verify `sbt stage` produces a runnable distribution**
+  - Run locally, confirm `target/universal/stage/bin/<app>` starts with production.conf
+
+#### Phase 2: Neon Database Setup
+
+- [ ] **Create Neon project in `eu-central-1`**
+  - Note the pooled connection string (`-pooler.*.neon.tech`)
+  - Create a dedicated role with least-privilege (`SELECT`, `INSERT`, `UPDATE`, `DELETE` on app tables only)
+
+- [ ] **Test Neon connectivity locally**
+  - Point local Play app at Neon pooled endpoint (temporary override in `application.conf` or `-D` flag)
+  - Confirm evolutions apply cleanly and CRUD operations work
+
+- [ ] **Create a Neon dev branch (optional but recommended)**
+  - Use for testing schema migrations before applying to main branch
+
+#### Phase 3: GCP Project & Secret Setup
+
+- [ ] **Create or select GCP project**
+  - Enable Cloud Run, Secret Manager, Cloud Build APIs
+
+- [ ] **Create dedicated service account** (`smeckles-api@<project>.iam.gserviceaccount.com`)
+  - Grant `roles/secretmanager.secretAccessor` only
+
+- [ ] **Store secrets in Secret Manager**
+  - `db-url` — full JDBC pooled connection string with `?sslmode=require`
+  - `db-user` — Neon role username
+  - `db-password` — Neon role password
+  - `app-secret` — Play application secret (64-byte random, base64)
+
+- [ ] **Configure GCP budget alert**
+  - Budget: $1.00/month
+  - Thresholds: 50%, 90%, 100%
+  - Notification: billing admins email
+
+#### Phase 4: Deploy to Cloud Run
+
+- [ ] **Deploy via `gcloud run deploy`**
+  - `--source .` (Cloud Build builds the Docker image)
+  - `--region europe-west1`
+  - `--memory 1Gi`, `--cpu 1`
+  - `--max-instances 1`, `--min-instances 0`
+  - `--set-secrets` for all four secrets
+  - `--service-account` pinned to dedicated SA
+  - `--allow-unauthenticated`
+  - `--port 9000`
+  - `--timeout 60` (reduce from default 300s)
+
+- [ ] **Verify deployment**
+  - `curl <service-url>/health` → 200
+  - `curl <service-url>/api/v1/customers` → 200 (empty list or seeded data)
+  - Check Cloud Run logs for clean startup
+
+- [ ] **Verify cold start behaviour**
+  - Wait >5 min, hit the service, confirm response within ~10s
+  - Confirm Neon wakes correctly (check Neon dashboard activity)
+
+#### Phase 5: Post-Deploy Hardening
+
+- [ ] **Switch `play.evolutions.db.default.autoApply` to `false`**
+  - After initial schema is bootstrapped, disable auto-apply
+  - Document the manual evolution workflow (Neon SQL console or CI step)
+
+- [ ] **Set up Cloud Run request logging / alerting (optional)**
+  - Cloud Logging filter for 5xx responses
+  - Alert policy: >5 errors in 5 minutes → email
+
+- [ ] **Document credential rotation procedure**
+  - Manual steps: rotate in Neon console → update Secret Manager version → `gcloud run services update`
+
+- [ ] **Consider future enhancements (backlog, not blocking)**
+  - Automated secret rotation via Cloud Function + Cloud Scheduler
+  - Custom domain (map via Cloud Run domain mapping)
+  - Frontend (Firebase Hosting) → Cloud Run CORS configuration
+  - Cloud Armor rate limiting if publicly listed
+
+---
+
+### Estimated Effort
+
+| Phase | Effort | Dependencies |
+|-------|--------|--------------|
+| Phase 1: Config & Packaging | ~2–3 hours | None |
+| Phase 2: Neon Setup | ~1 hour | Neon account |
+| Phase 3: GCP & Secrets | ~1 hour | GCP account with billing |
+| Phase 4: Deploy | ~1–2 hours | Phases 1–3 complete |
+| Phase 5: Hardening | ~1 hour | Phase 4 complete |
+| **Total** | **~6–8 hours** | — |
