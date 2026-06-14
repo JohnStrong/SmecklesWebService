@@ -7,3 +7,6 @@ POST    /api/v1/customers        controllers.CustomerController.createCustomer()
 GET     /api/v1/customers/:email/shopping-lists    controllers.ShoppingListController.getShoppingLists(email: String)
 # Create a new shopping list for a customer
 POST    /api/v1/customers/:email/shopping-lists    controllers.ShoppingListController.create(email: String)
+
+# Health check
+GET     /api/v1/health   controllers.HealthController.check()

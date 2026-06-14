@@ -12,6 +12,7 @@ A personal budgeting companion that grows with you — from simple shopping list
 - [Service Flow](#service-flow)
 - [How To Run](#how-to-run)
 - [API](#api)
+  - [Health Check](#health-check)
   - [Create Customer](#create-customer)
   - [Get Customer by Email](#get-customer-by-email)
   - [Create Shopping List](#create-shopping-list)
@@ -173,6 +174,16 @@ sbt run
 Server starts on **http://localhost:9000** with auto-reloading enabled.
 
 ## API
+
+### Health Check
+
+```
+GET /health
+```
+
+| Status | Response |
+|--------|----------|
+| 200 | `{"status": "ok"}` |
 
 ### Create Customer
 
