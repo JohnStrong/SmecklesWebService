@@ -261,6 +261,7 @@ Content-Type: application/json
 |--------|----------|
 | 201 | `{"email": "user@example.com"}` |
 | 400 | `{"error": "Email is required"}` — missing, null, or empty string |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 409 | `{"error": "Customer with email ... already exists."}` |
 
 ### Get Customer by Email
@@ -272,6 +273,7 @@ GET /api/v1/customers/:email
 | Status | Response |
 |--------|----------|
 | 200 | `{"email": "user@example.com"}` |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 404 | `{"error": "Customer with email ... not found."}` |
 
 ### Create Shopping List
@@ -299,6 +301,7 @@ Validation rules:
 |--------|----------|
 | 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 409 | `{"error": "Shopping list already exists for email ..."}` |
 
 ### Get Shopping Lists
@@ -310,6 +313,7 @@ GET /api/v1/customers/:email/shopping-lists
 | Status | Response |
 |--------|----------|
 | 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}]` |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 500 | `{"error": "..."}` — unexpected server error |
 
 ### Examples
