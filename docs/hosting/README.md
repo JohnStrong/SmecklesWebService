@@ -15,6 +15,7 @@
   - [Single Instance Scale](#single-instance-scale)
   - [Deployment Steps](#deployment-steps)
   - [Summary](#summary)
+  - [Encryption in Transit (HTTPS)](#encryption-in-transit-https)
 - [Securing Cloud Run → Neon Connectivity](#securing-cloud-run--neon-connectivity)
   - [Options Evaluated](#options-evaluated)
   - [Option 1: Secret Manager + Password Auth](#option-1-secret-manager--password-auth-recommended-start)
@@ -432,6 +433,75 @@ curl https://YOUR_SERVICE_URL/api/v1/customers
 | Billing protection | GCP budget alerts + Neon hard limits on free plan |
 | Max scale (single instance) | 8 vCPU, 32 GiB RAM, 1000 concurrent requests |
 | Persistence guarantee | Neon is durable PostgreSQL — data survives restarts, redeploys, and container recycling |
+
+---
+
+### Encryption in Transit (HTTPS)
+
+#### TL;DR
+
+**Cloud Run gives you HTTPS for free. No dev work, no certificates to buy, no config changes.**
+
+Every Cloud Run service gets a `https://<service>-<hash>.run.app` URL with a Google-managed TLS certificate. This is automatic, free, and requires zero setup on your part.
+
+#### How It Works
+
+```
+Browser / Frontend
+       │
+       │  HTTPS (TLS 1.3, Google-managed cert)
+       ▼
+┌─────────────────────┐
+│  Google Front End   │  ← terminates TLS here
+│  (GFE / load balancer)│
+└────────┬────────────┘
+         │  HTTP (plain, internal Google network)
+         ▼
+┌─────────────────────┐
+│  Cloud Run container │  ← your app listens on port 9000 (HTTP)
+└─────────────────────┘
+```
+
+- Google's front-end infrastructure handles TLS termination — your container receives plain HTTP internally
+- The certificate covers `*.run.app` (wildcard) — it's not per-service, so there's nothing to provision or renew
+- TLS 1.3 is supported by default; TLS 1.2 as fallback for older clients
+- Certificate renewal is fully automated by Google — you never see or manage it
+
+#### Cost
+
+| Item | Cost |
+|------|------|
+| HTTPS on `*.run.app` domain | **$0** — included with Cloud Run |
+| Google-managed cert for custom domain | **$0** — free if you map a custom domain via Cloud Run domain mapping |
+| Self-managed cert (bring your own) | **$0** — you can upload your own, but there's no reason to since Google provides one |
+
+There is **no certificate registry fee, no annual renewal cost, and no need to self-sign**. Google issues and rotates the certificates automatically using their own CA.
+
+#### Custom Domain (Future)
+
+If you later add a custom domain (e.g. `api.smeckles.app`):
+
+```bash
+gcloud run domain-mappings create --service smeckles-api \
+  --domain api.smeckles.app --region europe-west1
+```
+
+Google provisions a free managed certificate for your domain via Let's Encrypt (takes ~15 minutes on first setup). No cost, no manual renewal.
+
+#### Do You Need to Do Anything?
+
+| Question | Answer |
+|----------|--------|
+| Do I need to buy a certificate? | No |
+| Do I need to configure TLS in Play? | No — Play receives plain HTTP; TLS is terminated upstream |
+| Do I need to self-sign? | No — and you shouldn't; browsers reject self-signed certs |
+| Is `*.run.app` cert trusted by browsers? | Yes — signed by Google Trust Services CA |
+| Does the frontend need any config? | No — just call `https://` URLs (which it already does) |
+| Do I need to set `play.http.forwarded` or X-Forwarded-Proto? | Not required for basic operation; useful if you want to enforce HTTPS redirects in Play, but Cloud Run only exposes HTTPS externally anyway |
+
+#### Summary
+
+Cloud Run HTTPS is zero-effort, zero-cost, and production-grade out of the box. No action items for Milestone 1 or 2.
 
 ---
 
