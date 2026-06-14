@@ -907,7 +907,10 @@ fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
 - [ ] **Add to `conf/application.conf`**
 
 ```hocon
-# App secret — "changeme" for local dev, overridden by env var on Cloud Run
+# App secret — Play uses this to sign session cookies and CSRF tokens.
+# Play refuses to start in production mode without a real (non-default) value.
+# "changeme" is fine for local dev (dev mode skips the check).
+# On Cloud Run, the APPLICATION_SECRET env var (from Secret Manager) overrides it.
 play.http.secret.key = "changeme"
 play.http.secret.key = ${?APPLICATION_SECRET}
 
