@@ -11,6 +11,9 @@ A personal budgeting companion that grows with you — from simple shopping list
 - [Project Structure](#project-structure)
 - [Service Flow](#service-flow)
 - [How To Run](#how-to-run)
+- [Authentication](#authentication)
+  - [How It Works](#how-it-works)
+  - [Getting a Bearer Token](#getting-a-bearer-token)
 - [API](#api)
   - [Health Check](#health-check)
   - [Create Customer](#create-customer)
@@ -173,13 +176,73 @@ sbt run
 
 Server starts on **http://localhost:9000** with auto-reloading enabled.
 
+## Authentication
+
+All API endpoints except `/health` require a valid Firebase Auth ID token in the `Authorization` header.
+
+### How It Works
+
+1. User signs in via Google on the frontend (Firebase Auth)
+2. Frontend obtains an ID token: `await user.getIdToken()`
+3. Frontend sends the token with every request: `Authorization: Bearer <token>`
+4. Backend verifies the token signature against Google's public keys (JWKS)
+5. Backend checks issuer, audience, and expiry
+6. If valid → request proceeds; if invalid → 401 Unauthorized
+
+The backend uses [auth0/java-jwt](https://github.com/auth0/java-jwt) + [auth0/jwks-rsa](https://github.com/auth0/jwks-rsa-java) for verification. No Firebase Admin SDK required.
+
+### Getting a Bearer Token
+
+**Option 1: From the frontend (normal flow)**
+
+```javascript
+import { getAuth } from "firebase/auth";
+const token = await getAuth().currentUser.getIdToken();
+console.log(token); // copy this for curl testing
+```
+
+**Option 2: Using the Firebase Auth REST API (for CLI/curl testing)**
+
+```bash
+# Sign in with email/password and get an ID token
+# Replace API_KEY with your Firebase project's Web API Key
+# (Firebase Console → Project Settings → General → Web API Key)
+curl -s -X POST \
+  "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"your-password","returnSecureToken":true}' \
+  | jq -r '.idToken'
+```
+
+**Option 3: Using gcloud (if you have Identity Platform enabled)**
+
+```bash
+# Prints a valid ID token for the currently authenticated gcloud user
+gcloud auth print-identity-token
+```
+
+> **Note:** `gcloud auth print-identity-token` produces a Google ID token, not a Firebase ID token. This only works if your project uses Firebase Auth backed by Google Identity Platform and the token audience matches your project ID. For most cases, Option 1 or 2 is simpler.
+
+**Store the token for reuse:**
+
+```bash
+export TOKEN="eyJhbGciOi..."
+
+# Then use in requests:
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/customers/me@example.com
+```
+
 ## API
+
+> **All endpoints except `/health` require authentication.** Include `Authorization: Bearer <token>` in every request. See [Authentication](#authentication) for how to obtain a token.
 
 ### Health Check
 
 ```
 GET /health
 ```
+
+No authentication required.
 
 | Status | Response |
 |--------|----------|
@@ -254,19 +317,23 @@ GET /api/v1/customers/:email/shopping-lists
 ```bash
 # Create a customer
 curl -X POST http://localhost:9000/api/v1/customers \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"email":"hello@example.com"}'
 
 # Get customer by email
-curl http://localhost:9000/api/v1/customers/hello@example.com
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:9000/api/v1/customers/hello@example.com
 
 # Create a shopping list
 curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
 
 # Get all shopping lists for a customer
-curl http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists
 ```
 
 ## Database Configuration
@@ -372,7 +439,12 @@ Start the server:
 sbt run
 ```
 
-Then use curl against **http://localhost:9000** as shown in the examples above.
+Get a token (see [Getting a Bearer Token](#getting-a-bearer-token)), then use curl against **http://localhost:9000**:
+
+```bash
+export TOKEN="<your-firebase-id-token>"
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/customers/me@example.com
+```
 
 ## Project Status
 

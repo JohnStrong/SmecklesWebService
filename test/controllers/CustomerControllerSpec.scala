@@ -6,23 +6,19 @@ import org.mockito.Mockito.*
 import play.api.test.*
 import play.api.test.Helpers.*
 import play.api.libs.json.*
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.stream.Materializer
 import services.CustomerService
 import models.Customer
+import helpers.StubAuth
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
-  implicit private val system: ActorSystem = ActorSystem("test")
-  implicit private val mat: Materializer = Materializer.matFromSystem
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
   private def createFixture() = {
     val mockService = mock(classOf[CustomerService])
-    val stubComponents = Helpers.stubControllerComponents()
-    val controller = new CustomerController(stubComponents, mockService)
+    val controller = new CustomerController(Helpers.stubControllerComponents(), StubAuth.action, mockService)
     (controller, mockService)
   }
 
@@ -61,7 +57,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "new@example.com"))
-      val result = call(controller.createCustomer(), request)
+      val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe CREATED
       (contentAsJson(result) \ "email").as[String] shouldBe "test@example.com"
@@ -73,7 +69,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("name" -> "no email"))
-      val result = call(controller.createCustomer(), request)
+      val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe BAD_REQUEST
     }
@@ -86,7 +82,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "exists@example.com"))
-      val result = call(controller.createCustomer(), request)
+      val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe CONFLICT
       (contentAsJson(result) \ "error").as[String] should include("already exists")
@@ -98,7 +94,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> ""))
-      val result = call(controller.createCustomer(), request)
+      val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe BAD_REQUEST
     }
@@ -109,7 +105,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> JsNull))
-      val result = call(controller.createCustomer(), request)
+      val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe BAD_REQUEST
     }

@@ -5,6 +5,7 @@ import play.api.mvc.*
 import play.api.libs.json.*
 import services.CustomerService
 import models.Customer
+import auth.AuthenticatedAction
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -25,23 +26,25 @@ import scala.concurrent.{ExecutionContext, Future}
  * type that `Action.async` expects. This incurs no thread-pool overhead.
  *
  * @param controllerComponents Play's standard controller dependencies
+ * @param authenticated Firebase Auth token verification action
  * @param customerService the business-logic layer for customer operations
  * @param ec the ExecutionContext used by `.map` callbacks on Futures
  */
 @Singleton
 class CustomerController @Inject()(
   val controllerComponents: ControllerComponents,
+  authenticated: AuthenticatedAction,
   customerService: CustomerService
 )(implicit ec: ExecutionContext) extends BaseController {
 
-  def getCustomerByEmail(email: String): Action[AnyContent] = Action.async {
+  def getCustomerByEmail(email: String): Action[AnyContent] = authenticated.async { _ =>
     customerService.findByEmail(email).map {
       case Left(errorMessage) => NotFound(Json.obj("error" -> errorMessage))
       case Right(customer) => Ok(Json.toJson(customer))
     }
   }
 
-  def createCustomer(): Action[JsValue] = Action.async(parse.json) { request =>
+  def createCustomer(): Action[JsValue] = authenticated.async(parse.json) { request =>
     (request.body \ "email").asOpt[String].filter(_.trim.nonEmpty) match {
       case None => Future.successful { BadRequest(Json.obj("error" -> "Email is required")) }
       case Some(email) => customerService.createCustomer(email).map {

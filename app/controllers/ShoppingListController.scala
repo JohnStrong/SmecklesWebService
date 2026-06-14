@@ -6,30 +6,32 @@ import play.api.libs.json.*
 import play.api.mvc.BaseController
 import models.requests.ShoppingListCreateRequest
 import services.ShoppingListService
+import auth.AuthenticatedAction
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class ShoppingListController @Inject()(
   val controllerComponents: ControllerComponents,
+  authenticated: AuthenticatedAction,
   val service: ShoppingListService
 )(implicit ec: ExecutionContext) extends BaseController {
 
   @Deprecated
-  def getShoppingList(email: String): Action[AnyContent] = Action.async {
+  def getShoppingList(email: String): Action[AnyContent] = authenticated.async { _ =>
     service.getShoppingList(email) map {
       case Left(errorMessage) => NotFound(Json.obj("error" -> errorMessage))
       case Right(shoppingList) => Ok(Json.toJson(shoppingList))
     }
   }
 
-  def getShoppingLists(email: String): Action[AnyContent] = Action.async {
+  def getShoppingLists(email: String): Action[AnyContent] = authenticated.async { _ =>
     service.getShoppingLists(email) map {
       case Left(errorMessage) => InternalServerError(Json.obj("error" -> errorMessage))
       case Right(shoppingList) => Ok(Json.toJson(shoppingList))
     }
   }
 
-  def create(email: String): Action[JsValue] = Action.async(parse.json) { request =>
+  def create(email: String): Action[JsValue] = authenticated.async(parse.json) { request =>
     request.body.validate[ShoppingListCreateRequest] match {
       case JsError(errors) => Future.successful {
           BadRequest(Json.obj("error" -> "Invalid request format", "details" -> JsError.toJson(errors)))

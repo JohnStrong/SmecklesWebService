@@ -4,6 +4,7 @@ import com.google.inject.{AbstractModule, TypeLiteral}
 import repositories.DataRepository
 import repositories.customer.SlickCustomerRepository
 import repositories.shoppinglist.SlickShoppingListRepository
+import auth.{JwkProviderFactory, GoogleJwkProviderFactory}
 
 class Module extends AbstractModule {
   override def configure(): Unit = {
@@ -19,5 +20,10 @@ class Module extends AbstractModule {
      */
     bind(new TypeLiteral[DataRepository[String, ShoppingListWithItems]]() {}).to(classOf[SlickShoppingListRepository])
     bind(classOf[ShoppingListService]).to(classOf[ShoppingListServiceImpl])
+
+    /**
+     * Auth
+     */
+    bind(classOf[JwkProviderFactory]).to(classOf[GoogleJwkProviderFactory])
   }
 }
