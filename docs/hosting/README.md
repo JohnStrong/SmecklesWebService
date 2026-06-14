@@ -829,7 +829,7 @@ This section captures the concrete config and code changes required to go from t
 
 ---
 
-##### Phase 1.1: Health Check Endpoint
+##### Phase 1.1: Health Check Endpoint [COMPLETED ✅]
 
 **Plain English:** A simple endpoint that Cloud Run (and you) can hit to confirm the app is alive and ready. Also serves as a smoke test that your test harness is working before you tackle the auth handler.
 
@@ -847,7 +847,7 @@ GET     /health     controllers.HealthController.check()
 
 ---
 
-##### Phase 1.2: Firebase Auth Token Verification
+##### Phase 1.2: Firebase Auth Token Verification [COMPLETED ✅]
 
 **Plain English:** The frontend signs in with Google via Firebase Auth and gets an ID token (a signed JWT). It sends this as `Authorization: Bearer <token>` on every API call. The backend verifies the token is genuine by checking its signature against Google's public keys, confirming the issuer/audience match your Firebase project, and rejecting expired tokens. This is standard JWT verification — no Firebase Admin SDK needed on the backend.
 
