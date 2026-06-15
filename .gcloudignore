@@ -1,0 +1,14 @@
+.git/
+.idea/
+.bsp/
+.vscode/
+.DS_Store
+target/
+project/target/
+project/project/
+*.log
+node_modules/
+docs/
+agent-prompts/
+functional-tests/
+test/

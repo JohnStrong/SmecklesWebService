@@ -1015,7 +1015,7 @@ curl http://localhost:9000/api/v1/health
 
 ---
 
-##### Phase 1.5: GCP Setup & Deploy (H2 Mode)
+##### Phase 1.5: GCP Setup & Deploy (H2 Mode) [COMPLETED ✅]
 
 **Plain English:** We set up a GCP project, store the Play app secret securely in Secret Manager, create a least-privilege service account for the container, and deploy. Cloud Run builds the Docker image for us (via Cloud Build from the Dockerfile) and runs it as a serverless container. The `--max-instances 1` flag keeps H2 state consistent (one instance = one in-memory DB).
 
@@ -1091,7 +1091,7 @@ gcloud billing budgets create \
 
 ---
 
-##### Phase 1.6: Verification
+##### Phase 1.6: Verification [COMPLETED ✅]
 
 ```bash
 # Get the service URL
