@@ -176,6 +176,17 @@ sbt run
 
 Server starts on **http://localhost:9000** with auto-reloading enabled.
 
+### Production mode (staged build)
+
+```bash
+sbt stage
+./target/universal/stage/bin/simpleshoppinglistapp \
+  -Dhttp.port=9000 \
+  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters
+```
+
+Runs the compiled production artifact locally. Useful for verifying Docker/Cloud Run behaviour without deploying.
+
 ## Authentication
 
 All API endpoints except `/health` require a valid Firebase Auth ID token in the `Authorization` header.
@@ -441,6 +452,15 @@ Start the server:
 
 ```bash
 sbt run
+```
+
+Or run the production-mode staged build:
+
+```bash
+sbt stage
+./target/universal/stage/bin/simpleshoppinglistapp \
+  -Dhttp.port=9000 \
+  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters
 ```
 
 Get a token (see [Getting a Bearer Token](#getting-a-bearer-token)), then use curl against **http://localhost:9000**:
