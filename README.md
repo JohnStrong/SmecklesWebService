@@ -11,6 +11,7 @@ A personal budgeting companion that grows with you — from simple shopping list
 - [Project Structure](#project-structure)
 - [Service Flow](#service-flow)
 - [How To Run](#how-to-run)
+- [How To Deploy](#how-to-deploy)
 - [Authentication](#authentication)
   - [How It Works](#how-it-works)
   - [Getting a Bearer Token](#getting-a-bearer-token)
@@ -30,6 +31,7 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Unit tests](#unit-tests)
   - [Functional tests](#functional-tests)
   - [Manual testing](#manual-testing)
+- [Accounts](#accounts)
 - [Project Status](#project-status)
 
 ## Overview
@@ -186,6 +188,92 @@ sbt stage
 ```
 
 Runs the compiled production artifact locally. Useful for verifying Docker/Cloud Run behaviour without deploying.
+
+## How To Deploy
+
+Deploys to Google Cloud Run (europe-west1). Requires `gcloud` CLI authenticated and project set.
+
+### Prerequisites (one-time setup)
+
+```bash
+# Set project
+gcloud config set project smeckles-app-11ca3
+
+# Enable required APIs
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
+  secretmanager.googleapis.com artifactregistry.googleapis.com
+
+# Create and store application secret
+printf "$(openssl rand -base64 64)" | gcloud secrets create play-app-secret --data-file=-
+
+# Create service account
+gcloud iam service-accounts create smeckles-api-preprod --display-name="Smeckles API Pre-Prod"
+
+# Grant secret access
+gcloud secrets add-iam-policy-binding play-app-secret \
+  --member="serviceAccount:smeckles-api-preprod@smeckles-app-11ca3.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
+
+### Deploy
+
+```bash
+gcloud run deploy smeckles-api-preprod \
+  --source . \
+  --region europe-west1 \
+  --memory 512Mi --cpu 1 \
+  --max-instances 1 --min-instances 0 \
+  --set-secrets "APPLICATION_SECRET=play-app-secret:latest" \
+  --service-account smeckles-api-preprod@smeckles-app-11ca3.iam.gserviceaccount.com \
+  --allow-unauthenticated \
+  --port 9000 \
+  --timeout 60
+```
+
+### Verify deployment
+
+```bash
+SERVICE_URL=$(gcloud run services describe smeckles-api-preprod \
+  --region europe-west1 --format='value(status.url)')
+
+# 1. Health check (no auth)
+curl $SERVICE_URL/api/v1/health
+# → 200 {"status":"ok"}
+
+# 2. Unauthenticated request (should be rejected)
+curl $SERVICE_URL/api/v1/customers/test@example.com
+# → 401 {"error":"Missing or malformed Authorization header"}
+
+# 3. Get a token
+TOKEN=$(curl -s -X POST \
+  "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"YOUR_EMAIL","password":"YOUR_PASSWORD","returnSecureToken":true}' \
+  | jq -r '.idToken')
+
+# 4. Create customer
+curl -X POST "$SERVICE_URL/api/v1/customers" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"hello@example.com"}'
+# → 201 {"email":"hello@example.com"}
+
+# 5. Get customer
+curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@example.com"
+# → 200 {"email":"hello@example.com"}
+
+# 6. Create shopping list
+curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
+# → 201
+
+# 7. Get shopping lists
+curl -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
+# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[...]}]
+```
 
 ## Authentication
 
@@ -469,6 +557,12 @@ Get a token (see [Getting a Bearer Token](#getting-a-bearer-token)), then use cu
 export TOKEN="<your-firebase-id-token>"
 curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/customers/me@example.com
 ```
+
+## Accounts
+
+| Name | Purpose |
+|------|---------|
+| `smeckles-api-preprod@smeckles-app-11ca3.iam.gserviceaccount.com` | Pre-production Cloud Run service account — used for integration testing and e2e validation before promoting to production |
 
 ## Project Status
 

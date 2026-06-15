@@ -1,5 +1,5 @@
 # Stage 1: Compile with full build toolchain (discarded after build)
-FROM sbtscala/scala-sbt:eclipse-temurin-21.0.6_7_1.10.11_3.3.7 AS builder
+FROM sbtscala/scala-sbt:eclipse-temurin-21.0.11_10_1.12.11_3.3.7 AS builder
 WORKDIR /app
 
 # Deps layer — cached until build.sbt or project/ changes
@@ -10,11 +10,10 @@ RUN sbt update
 # Source layer — rebuilds on code changes only
 COPY app/    app/
 COPY conf/   conf/
-COPY public/ public/
 RUN sbt stage
 
 # Stage 2: Minimal runtime (JRE only, no sbt/JDK/source)
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=builder /app/target/universal/stage/ .
 EXPOSE 9000
