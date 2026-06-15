@@ -931,6 +931,12 @@ play.filters.hosts.allowed = ["localhost", ".run.app"]
 #
 # We hardcode both plus localhost for dev. No env var needed — these are known at build time.
 play.filters.enabled += "play.filters.cors.CORSFilter"
+
+# CSRF — Play enables CSRF protection by default in production mode.
+# This API is stateless with Bearer token auth (no cookies/sessions), so CSRF
+# attacks don't apply. Disable it to allow POST/PUT/DELETE from API clients.
+play.filters.disabled += "play.filters.csrf.CSRFFilter"
+
 play.filters.cors {
   allowedOrigins = [
     "http://localhost:3000",                         # local frontend dev server
@@ -946,7 +952,7 @@ play.filters.cors {
 
 ---
 
-##### Phase 1.4: Dockerfile & Packaging
+##### Phase 1.4: Dockerfile & Packaging [COMPLETED ✅]
 
 **Plain English:** We need to package the Play app into a Docker image that Cloud Run can run. We use a two-stage build — stage 1 compiles the code using a full JDK+sbt image, stage 2 copies just the compiled output into a tiny JRE-only image (~80MB). This keeps the deployed image small and secure (no build tools in production).
 
@@ -998,8 +1004,13 @@ node_modules/
 
 ```bash
 sbt stage
-./target/universal/stage/bin/simpleshoppinglistapp -Dhttp.port=9000
-# → http://localhost:9000/health should respond 200
+./target/universal/stage/bin/simpleshoppinglistapp \
+  -Dhttp.port=9000 \
+  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters
+
+# In another terminal:
+curl http://localhost:9000/api/v1/health
+# → 200 {"status":"ok"}
 ```
 
 ---
