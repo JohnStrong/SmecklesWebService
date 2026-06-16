@@ -15,6 +15,7 @@ A personal budgeting companion that grows with you — from simple shopping list
 - [Authentication](#authentication)
   - [How It Works](#how-it-works)
   - [Getting a Bearer Token](#getting-a-bearer-token)
+- [Data Model](#data-model)
 - [API](#api)
   - [Health Check](#health-check)
   - [Create Customer](#create-customer)
@@ -330,6 +331,71 @@ export TOKEN="eyJhbGciOi..."
 # Then use in requests:
 curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/customers/me@example.com
 ```
+
+## Data Model
+
+### Entity Relationship
+
+```
+users 1──────┐
+             │ owns (planned FK: customers.user_id)
+             ▼
+customers 1──────┐
+                 │ FK: shopping_lists.email → customers.email
+                 ▼
+shopping_lists 1──────┐
+                      │ FK: shopping_list_items.shopping_list_id → shopping_lists.id
+                      ▼
+               shopping_list_items
+```
+
+### Tables
+
+#### `users` (planned)
+
+The authenticated Google account. Created automatically on first authenticated request if the email is not already present.
+
+| Column | Type | Constraints | Source |
+|--------|------|-------------|--------|
+| `id` | BIGINT | PK, auto-increment | Generated |
+| `email` | VARCHAR(320) | NOT NULL, UNIQUE | JWT `email` claim |
+
+#### `customers`
+
+A person managed within the app (e.g. a family member, a flatmate). Currently the top-level entity; will gain a `user_id` FK to `users` once the users table is implemented.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `email` | VARCHAR(320) | PK | Customer identifier |
+| `user_id` | BIGINT | FK → `users.id` (planned) | The authenticated user who manages this customer |
+
+#### `shopping_lists`
+
+A named shopping list belonging to a customer.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | BIGINT | PK, auto-increment | Generated |
+| `email` | VARCHAR(320) | NOT NULL, UNIQUE, FK → `customers.email` | Owner customer |
+| `name` | VARCHAR(30) | NOT NULL | List display name |
+
+#### `shopping_list_items`
+
+An item within a shopping list.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | BIGINT | PK, auto-increment | Generated |
+| `shopping_list_id` | BIGINT | NOT NULL, FK → `shopping_lists.id` | Parent list |
+| `name` | VARCHAR(30) | NOT NULL | Item name |
+| `quantity` | INT | NOT NULL | Must be ≥ 1 |
+
+### Planned Changes
+
+- Add `users` table with auto-increment `id`, unique `email`
+- Add `user_id` FK column to `customers` — scopes customers to the signed-in user
+- Lookup/create user on each authenticated request using the JWT `email` claim
+- A user can manage multiple customers; each customer belongs to exactly one user
 
 ## API
 
