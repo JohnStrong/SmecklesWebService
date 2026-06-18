@@ -1,27 +1,37 @@
 package services
 
 import javax.inject.*
-import models.Customer
+import models.{Customer, User}
 import repositories.DataRepository
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 type ErrorMessage = String
 
 trait CustomerService {
-  def createCustomer(email: String, userId: Long): Future[Either[ErrorMessage, Customer]]
+  def createCustomer(email: String, authenticateUserEmail: String): Future[Either[ErrorMessage, Customer]]
   def findByEmail(email: String): Future[Either[ErrorMessage, Customer]]
 }
 
 class CustomerServiceImpl @Inject()(
-    val dataRepository: DataRepository[String, Customer]
-) extends CustomerService {
+    val customerDataRepository: DataRepository[String, Customer],
+    val usersDataRepository: DataRepository[String, User]
+)(implicit ec: ExecutionContext) extends CustomerService {
 
-  override def createCustomer(email: String, userId: Long): Future[Either[ErrorMessage, Customer]] = {
-    dataRepository.create(Customer(email, userId))
+  override def createCustomer(email: String, authenticateUserEmail: String): Future[Either[ErrorMessage, Customer]] = {
+    usersDataRepository.findByIdentifier(authenticateUserEmail).flatMap {
+      // user doesn't yet exist, create a new user before adding any customers
+      // TODO: check the error from findByIdentifier, it might be a transient issue not necessarily meaning the user doesn't exist
+      case Left(_) => usersDataRepository.create(User(userId = None, email = authenticateUserEmail)).flatMap {
+        case Left(errorMessage) => Future.successful(Left(errorMessage))
+        case Right(user) => customerDataRepository.create(Customer(email, user.userId.get))
+      }
+      // user already exists, create the customer as normal
+      case Right(user) => customerDataRepository.create(Customer(email, user.userId.get))
+    }
   }
 
   override def findByEmail(email: String): Future[Either[ErrorMessage, Customer]] = {
-    dataRepository.findByIdentifier(email)
+    customerDataRepository.findByIdentifier(email)
   }
 }
