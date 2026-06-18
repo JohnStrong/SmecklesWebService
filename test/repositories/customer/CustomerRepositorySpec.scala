@@ -12,7 +12,7 @@ class CustomerRepositorySpec extends AnyWordSpec
   with BeforeAndAfterEach
   with EitherValues {
 
-  private val testCustomer = Customer(email = "test@example.com")
+  private val testCustomer = Customer(email = "test@example.com", userId = 1L)
   private var customerRepository: CustomerRepository = _
 
   override def beforeEach(): Unit = {

@@ -1,6 +1,14 @@
 -- !Ups
+
+CREATE TABLE users(
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email VARCHAR(320) NOT NULL UNIQUE
+);
+
 CREATE TABLE customers (
-   email VARCHAR(320) PRIMARY KEY
+   email VARCHAR(320) PRIMARY KEY,
+   user_id BIGINT NOT NULL,
+   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE shopping_lists (
@@ -23,3 +31,4 @@ CREATE TABLE shopping_list_items (
 DROP TABLE shopping_list_items;
 DROP TABLE shopping_lists;
 DROP TABLE customers;
+DROP TABLE users;

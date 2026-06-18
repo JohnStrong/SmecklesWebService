@@ -2,12 +2,14 @@ package repositories.customer
 
 import models.Customer
 
-import org.scalatest.{BeforeAndAfterEach, EitherValues}
+import org.scalatest.EitherValues
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Span, Seconds, Millis}
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.play.guice.GuiceOneAppPerTest
+import play.api.db.slick.DatabaseConfigProvider
+import slick.jdbc.JdbcProfile
 
 class SlickCustomerRepositorySpec extends AnyWordSpec
   with Matchers
@@ -23,10 +25,20 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
 
   private def repository = app.injector.instanceOf[SlickCustomerRepository]
 
-  private val testCustomer = Customer(email = "test@example.com")
+  /** Insert a fake user row to satisfy the FK constraint on customers.user_id */
+  private def insertTestUser(): Long = {
+    val dbConfigProvider = app.injector.instanceOf[DatabaseConfigProvider]
+    val dbConfig = dbConfigProvider.get[JdbcProfile]
+    import dbConfig.profile.api.*
+    val insertAction = sqlu"INSERT INTO users (email) VALUES ('test@user.com')"
+    val idAction = sql"SELECT id FROM users WHERE email = 'test@user.com'".as[Long].head
+    dbConfig.db.run(insertAction.andThen(idAction)).futureValue
+  }
 
   "create" should {
     "persist customer to the datastore and return it" in {
+      val userId = insertTestUser()
+      val testCustomer = Customer(email = "test@example.com", userId = userId)
       val result = repository.create(testCustomer).futureValue
       result.value shouldBe testCustomer
 
@@ -35,6 +47,8 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
     }
 
     "return an error message if customer already exists in the datastore" in {
+      val userId = insertTestUser()
+      val testCustomer = Customer(email = "test@example.com", userId = userId)
       repository.create(testCustomer).futureValue
 
       val result = repository.create(testCustomer).futureValue
@@ -45,6 +59,8 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
 
   "findByIdentifier" should {
     "return the customer if it exists in the datastore" in {
+      val userId = insertTestUser()
+      val testCustomer = Customer(email = "test@example.com", userId = userId)
       repository.create(testCustomer).futureValue
 
       val result = repository.findByIdentifier(testCustomer.email).futureValue

@@ -2,8 +2,9 @@ package models
 
 import play.api.libs.json._
 
-case class Customer(email: String)
+case class Customer(email: String, userId: Long)
 
 object Customer {
-  implicit val format: Format[Customer] = Json.format[Customer]
+  // Only serialize email in API responses — userId is internal DB info
+  implicit val writes: Writes[Customer] = (c: Customer) => Json.obj("email" -> c.email)
 }

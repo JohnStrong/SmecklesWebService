@@ -47,7 +47,7 @@ class CustomerController @Inject()(
   def createCustomer(): Action[JsValue] = authenticated.async(parse.json) { request =>
     (request.body \ "email").asOpt[String].filter(_.trim.nonEmpty) match {
       case None => Future.successful { BadRequest(Json.obj("error" -> "Email is required")) }
-      case Some(email) => customerService.createCustomer(email).map {
+      case Some(email) => customerService.createCustomer(email, userId = 1L).map {
         case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))
         case Right(customer) => Created(Json.toJson(customer))
       }

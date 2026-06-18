@@ -1,13 +1,15 @@
 package repositories.shoppinglist
 
 import models.{Customer, ShoppingListItem, ShoppingListWithItems}
-import org.scalatest.{BeforeAndAfterEach, EitherValues}
+import org.scalatest.EitherValues
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.play.guice.GuiceOneAppPerTest
+import play.api.db.slick.DatabaseConfigProvider
 import repositories.customer.SlickCustomerRepository
+import slick.jdbc.JdbcProfile
 
 class SlickShoppingListRepositorySpec extends AnyWordSpec
   with Matchers
@@ -33,8 +35,16 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     ))
 
   private def withCustomer(test: => Unit): Unit = {
+    // insert a fake user to satisfy FK constraint on customers.user_id
+    val dbConfigProvider = app.injector.instanceOf[DatabaseConfigProvider]
+    val dbConfig = dbConfigProvider.get[JdbcProfile]
+    import dbConfig.profile.api.*
+    val userId = dbConfig.db.run(
+      sqlu"INSERT INTO users (email) VALUES ('test@user.com')"
+        .andThen(sql"SELECT id FROM users WHERE email = 'test@user.com'".as[Long].head)
+    ).futureValue
     // due to foreign key constraint between customers.email <=> shopping_lists.email , we must insert test customer entry
-    customerRepository.create(Customer(email = shoppingList.email)).futureValue
+    customerRepository.create(Customer(email = shoppingList.email, userId = userId)).futureValue
     test
   }
 

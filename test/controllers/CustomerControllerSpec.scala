@@ -22,7 +22,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
     (controller, mockService)
   }
 
-  private val testCustomer = Customer(email = "test@example.com")
+  private val testCustomer = Customer(email = "test@example.com", userId = 1L)
 
   "getCustomerByEmail" should {
 
@@ -52,7 +52,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
     "return 201 with customer JSON on success" in {
       val (controller, mockService) = createFixture()
-      when(mockService.createCustomer("new@example.com")).thenReturn(Future.successful(Right(testCustomer)))
+      when(mockService.createCustomer("new@example.com", 1L)).thenReturn(Future.successful(Right(testCustomer)))
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
@@ -76,7 +76,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
     "return 409 when customer already exists" in {
       val (controller, mockService) = createFixture()
-      when(mockService.createCustomer("exists@example.com"))
+      when(mockService.createCustomer("exists@example.com", 1L))
         .thenReturn(Future.successful(Left("Customer with email exists@example.com already exists.")))
 
       val request = FakeRequest(POST, "/")

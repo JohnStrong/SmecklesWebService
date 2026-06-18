@@ -15,8 +15,9 @@ class SlickCustomerRepository @Inject()(
   // Implementation note: Slick works weird with case classes, so always define class for Table constructs
   private class CustomerTable(tag: Tag) extends Table[Customer](tag, "customers") {
     def email = column[String]("email", O.PrimaryKey)
+    def userId = column[Long]("user_id")
 
-    def * = email <> (Customer.apply, c => Some(c.email))
+    def * = (email, userId) <> (Customer.apply, c => Some((c.email, c.userId)))
   }
 
   private val customers = TableQuery[CustomerTable]
