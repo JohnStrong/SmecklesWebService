@@ -20,15 +20,17 @@ class CustomerServiceImpl @Inject()(
 )(implicit ec: ExecutionContext) extends CustomerService {
 
   override def createCustomer(email: String, authenticateUserEmail: String): Future[Either[ErrorMessage, Customer]] = {
-    usersDataRepository.findByIdentifier(authenticateUserEmail).flatMap {
-      // user doesn't yet exist, create a new user before adding any customers
-      // TODO: check the error from findByIdentifier, it might be a transient issue not necessarily meaning the user doesn't exist
-      case Left(_) => usersDataRepository.create(User(userId = None, email = authenticateUserEmail)).flatMap {
-        case Left(errorMessage) => Future.successful(Left(errorMessage))
-        case Right(user) => customerDataRepository.create(Customer(email, user.userId.get))
-      }
-      // user already exists, create the customer as normal
+    findOrCreateUser(authenticateUserEmail).flatMap {
+      case Left(error) => Future.successful(Left(error))
       case Right(user) => customerDataRepository.create(Customer(email, user.userId.get))
+    }
+  }
+
+  private def findOrCreateUser(email: String): Future[Either[ErrorMessage, User]] = {
+    usersDataRepository.create(User(userId = None, email = email)).flatMap {
+      case Right(user) => Future.successful(Right(user))
+      case Left(error) if error.contains("already exists") => usersDataRepository.findByIdentifier(email)
+      case Left(error) => Future.successful(Left(error))
     }
   }
 

@@ -25,9 +25,9 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
 
   "createCustomer" should {
 
-    "return Right with new customer when user already exists" in {
+    "return Right with new customer when user is created" in {
       val (service, mockCustomerRepo, mockUserRepo) = freshService()
-      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Right(testUser)))
+      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Right(testUser)))
       when(mockCustomerRepo.create(any[Customer]())).thenReturn(Future.successful(Right(testCustomer)))
 
       val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
@@ -35,10 +35,11 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
       result shouldBe Right(testCustomer)
     }
 
-    "create user implicitly when user does not exist" in {
+    "return Right with new customer when user already exists" in {
       val (service, mockCustomerRepo, mockUserRepo) = freshService()
-      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Left("not found")))
-      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Right(testUser)))
+      when(mockUserRepo.create(any[User]()))
+        .thenReturn(Future.successful(Left("User with email auth@user.com already exists.")))
+      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Right(testUser)))
       when(mockCustomerRepo.create(any[Customer]())).thenReturn(Future.successful(Right(testCustomer)))
 
       val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
@@ -48,7 +49,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
 
     "return Left when customer email already exists" in {
       val (service, mockCustomerRepo, mockUserRepo) = freshService()
-      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Right(testUser)))
+      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Right(testUser)))
       when(mockCustomerRepo.create(any[Customer]()))
         .thenReturn(Future.successful(Left("Customer with email test@example.com already exists.")))
 
@@ -58,14 +59,13 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
       result.left.toOption.get should include("already exists")
     }
 
-    "return Left when user creation fails" in {
+    "return Left when user creation fails with unexpected error" in {
       val (service, _, mockUserRepo) = freshService()
-      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Left("not found")))
-      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Left("DB error")))
+      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Left("DB connection error")))
 
       val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
 
-      result shouldBe Left("DB error")
+      result shouldBe Left("DB connection error")
     }
   }
 

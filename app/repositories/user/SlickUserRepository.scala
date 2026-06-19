@@ -23,6 +23,7 @@ class SlickUserRepository @Inject()(
 
   override def create(payload: User): Future[Either[String, User]] = {
     val action = users.filter(_.email === payload.email)
+      .forUpdate
       .result
       .headOption
       .flatMap {
@@ -33,7 +34,12 @@ class SlickUserRepository @Inject()(
       }
       .transactionally
 
-    db.run(action)
+    db.run(action).recover {
+      case _: org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException =>
+        Left(s"User with email ${payload.email} already exists.")
+      case _: java.sql.SQLIntegrityConstraintViolationException =>
+        Left(s"User with email ${payload.email} already exists.")
+    }
   }
 
   override def findByIdentifier(email: String): Future[Either[String, User]] = {
