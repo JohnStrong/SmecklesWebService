@@ -279,6 +279,22 @@ curl -H "Authorization: Bearer $TOKEN" \
 # curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 #   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 204 No Content
+
+# 9. Delete a customer (use a separate customer to avoid conflicts with shopping list above)
+curl -X POST "$SERVICE_URL/api/v1/customers" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"delete-test@example.com"}'
+# → 201 {"email":"delete-test@example.com"}
+
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/delete-test@example.com"
+# → 204 No Content
+
+# 10. Confirm customer is gone
+curl -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/delete-test@example.com"
+# → 404 {"error":"Customer with email 'delete-test@example.com' not found."}
 ```
 
 ## Authentication
