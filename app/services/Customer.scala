@@ -11,6 +11,7 @@ type ErrorMessage = String
 trait CustomerService {
   def createCustomer(email: String, authenticateUserEmail: String): Future[Either[ErrorMessage, Customer]]
   def findByEmail(email: String): Future[Either[ErrorMessage, Customer]]
+  def deleteCustomer(email: String): Future[Either[ErrorMessage, Unit]]
 }
 
 class CustomerServiceImpl @Inject()(
@@ -34,4 +35,6 @@ class CustomerServiceImpl @Inject()(
   override def findByEmail(email: String): Future[Either[ErrorMessage, Customer]] = {
     customerDataRepository.findByIdentifier(email)
   }
+
+  override def deleteCustomer(email: String): Future[Either[ErrorMessage, Unit]] = ???
 }

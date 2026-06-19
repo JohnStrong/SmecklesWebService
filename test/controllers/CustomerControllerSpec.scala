@@ -110,4 +110,39 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
   }
+
+  "deleteCustomer" should {
+
+    "return 204 when customer is successfully deleted" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.deleteCustomer("test@example.com")).thenReturn(Future.successful(Right(())))
+
+      val result = controller.deleteCustomer("test@example.com").apply(FakeRequest())
+
+      status(result) shouldBe NO_CONTENT
+    }
+
+    "return 404 when customer does not exist" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.deleteCustomer("missing@example.com"))
+        .thenReturn(Future.successful(Left("Customer with email missing@example.com not found.")))
+
+      val result = controller.deleteCustomer("missing@example.com").apply(FakeRequest())
+
+      status(result) shouldBe NOT_FOUND
+      (contentAsJson(result) \ "error").as[String] should include("not found")
+    }
+
+    "return 401 when request is unauthenticated" in {
+      val mockService = mock(classOf[CustomerService])
+      val controller = new CustomerController(
+        Helpers.stubControllerComponents(), StubAuth.rejectAction, mockService
+      )
+
+      val result = controller.deleteCustomer("test@example.com").apply(FakeRequest())
+
+      status(result) shouldBe UNAUTHORIZED
+      (contentAsJson(result) \ "error").as[String] should include("Authorization")
+    }
+  }
 }
