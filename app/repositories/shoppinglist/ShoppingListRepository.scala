@@ -37,5 +37,7 @@ class ShoppingListRepository extends InMemoryDataRepository[String, ShoppingList
     }
   }
 
+  override def delete(id: String): Future[Either[String, Unit]] = ???
+
   override def findAllByIdentifier(id: String): Future[Either[String, List[ShoppingList]]] = ???
 }

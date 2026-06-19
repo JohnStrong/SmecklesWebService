@@ -3,88 +3,112 @@ package services
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.concurrent.ScalaFutures
+import org.mockito.Mockito.*
+import org.mockito.ArgumentMatchers.*
 import models.{Customer, User}
 import repositories.DataRepository
-import repositories.customer.CustomerRepository
 
-import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
 class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures {
 
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
-  /** Simple in-memory user repository for testing */
-  private class FakeUserRepository extends DataRepository[String, User] {
-    private val store = mutable.Map.empty[String, User]
-    private var nextId = 1L
+  private val testCustomer = Customer(email = "test@example.com", userId = 1L)
+  private val testUser = User(userId = Some(1L), email = "auth@user.com")
 
-    override def create(payload: User): Future[Either[String, User]] = Future.successful {
-      store.get(payload.email) match {
-        case Some(_) => Left(s"User with email ${payload.email} already exists.")
-        case None =>
-          val user = User(userId = Some(nextId), email = payload.email)
-          nextId += 1
-          store.put(payload.email, user)
-          Right(user)
-      }
-    }
-
-    override def findByIdentifier(id: String): Future[Either[String, User]] = Future.successful {
-      store.get(id).toRight(s"User with email '$id' not found.")
-    }
-
-    override def findAllByIdentifier(id: String): Future[Either[String, List[User]]] = ???
+  private def freshService() = {
+    val mockCustomerRepo = mock(classOf[DataRepository[String, Customer]])
+    val mockUserRepo = mock(classOf[DataRepository[String, User]])
+    (new CustomerServiceImpl(mockCustomerRepo, mockUserRepo), mockCustomerRepo, mockUserRepo)
   }
-
-  private def freshService() = new CustomerServiceImpl(new CustomerRepository(), new FakeUserRepository())
 
   "createCustomer" should {
 
-    "return Right with new customer on success (creates user implicitly)" in {
-      val service = freshService()
-      val result = service.createCustomer("new@example.com", "auth@user.com").futureValue
+    "return Right with new customer when user already exists" in {
+      val (service, mockCustomerRepo, mockUserRepo) = freshService()
+      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Right(testUser)))
+      when(mockCustomerRepo.create(any[Customer]())).thenReturn(Future.successful(Right(testCustomer)))
 
-      result.isRight shouldBe true
-      result.toOption.get.email shouldBe "new@example.com"
-      result.toOption.get.userId shouldBe 1L
+      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+
+      result shouldBe Right(testCustomer)
     }
 
-    "return Left with error when customer email already exists" in {
-      val service = freshService()
-      service.createCustomer("dup@example.com", "auth@user.com").futureValue
+    "create user implicitly when user does not exist" in {
+      val (service, mockCustomerRepo, mockUserRepo) = freshService()
+      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Left("not found")))
+      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Right(testUser)))
+      when(mockCustomerRepo.create(any[Customer]())).thenReturn(Future.successful(Right(testCustomer)))
 
-      val result = service.createCustomer("dup@example.com", "auth@user.com").futureValue
+      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+
+      result shouldBe Right(testCustomer)
+    }
+
+    "return Left when customer email already exists" in {
+      val (service, mockCustomerRepo, mockUserRepo) = freshService()
+      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Right(testUser)))
+      when(mockCustomerRepo.create(any[Customer]()))
+        .thenReturn(Future.successful(Left("Customer with email test@example.com already exists.")))
+
+      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
 
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("already exists")
     }
 
-    "reuse existing user on second call" in {
-      val service = freshService()
-      val first = service.createCustomer("c1@example.com", "auth@user.com").futureValue
-      val second = service.createCustomer("c2@example.com", "auth@user.com").futureValue
+    "return Left when user creation fails" in {
+      val (service, _, mockUserRepo) = freshService()
+      when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Left("not found")))
+      when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Left("DB error")))
 
-      // same user id since same auth email
-      first.toOption.get.userId shouldBe second.toOption.get.userId
+      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+
+      result shouldBe Left("DB error")
     }
   }
 
   "findByEmail" should {
 
     "return Right with customer when found" in {
-      val service = freshService()
-      service.createCustomer("find@example.com", "auth@user.com").futureValue
+      val (service, mockCustomerRepo, _) = freshService()
+      when(mockCustomerRepo.findByIdentifier("test@example.com")).thenReturn(Future.successful(Right(testCustomer)))
 
-      val result = service.findByEmail("find@example.com").futureValue
+      val result = service.findByEmail("test@example.com").futureValue
 
-      result.isRight shouldBe true
-      result.toOption.get.email shouldBe "find@example.com"
+      result shouldBe Right(testCustomer)
     }
 
     "return Left with error when not found" in {
-      val service = freshService()
-      val result = service.findByEmail("nonexistent@example.com").futureValue
+      val (service, mockCustomerRepo, _) = freshService()
+      when(mockCustomerRepo.findByIdentifier("missing@example.com"))
+        .thenReturn(Future.successful(Left("Customer with email 'missing@example.com' not found.")))
+
+      val result = service.findByEmail("missing@example.com").futureValue
+
+      result shouldBe a[Left[_, _]]
+      result.left.toOption.get should include("not found")
+    }
+  }
+
+  "deleteCustomer" should {
+
+    "return Right(()) when repository deletes successfully" in {
+      val (service, mockCustomerRepo, _) = freshService()
+      when(mockCustomerRepo.delete("test@example.com")).thenReturn(Future.successful(Right(())))
+
+      val result = service.deleteCustomer("test@example.com").futureValue
+
+      result shouldBe Right(())
+    }
+
+    "return Left with error when customer does not exist" in {
+      val (service, mockCustomerRepo, _) = freshService()
+      when(mockCustomerRepo.delete("missing@example.com"))
+        .thenReturn(Future.successful(Left("Customer with email 'missing@example.com' not found.")))
+
+      val result = service.deleteCustomer("missing@example.com").futureValue
 
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("not found")

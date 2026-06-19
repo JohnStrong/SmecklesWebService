@@ -36,5 +36,7 @@ class CustomerServiceImpl @Inject()(
     customerDataRepository.findByIdentifier(email)
   }
 
-  override def deleteCustomer(email: String): Future[Either[ErrorMessage, Unit]] = ???
+  override def deleteCustomer(email: String): Future[Either[ErrorMessage, Unit]] = {
+    customerDataRepository.delete(email)
+  }
 }

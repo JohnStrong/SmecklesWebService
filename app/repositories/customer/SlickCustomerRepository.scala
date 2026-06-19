@@ -54,5 +54,7 @@ class SlickCustomerRepository @Inject()(
     db.run(action)
   }
 
+  override def delete(id: String): Future[Either[String, Unit]] = ???
+
   override def findAllByIdentifier(id: String): Future[Either[String, List[Customer]]] = ???
 }
