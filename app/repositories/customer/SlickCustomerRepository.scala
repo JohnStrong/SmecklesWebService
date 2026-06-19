@@ -54,7 +54,12 @@ class SlickCustomerRepository @Inject()(
     db.run(action)
   }
 
-  override def delete(id: String): Future[Either[String, Unit]] = ???
+  override def delete(email: String): Future[Either[String, Unit]] = {
+    db.run(customers.filter(_.email === email).delete).map { // DELETE WHERE == optimistic delete
+      case 0 => Left(s"Customer with email '$email' not found.")
+      case _ => Right(())
+    }
+  }
 
   override def findAllByIdentifier(id: String): Future[Either[String, List[Customer]]] = ???
 }
