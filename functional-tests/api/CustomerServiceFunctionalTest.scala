@@ -34,34 +34,11 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
 
     // --- Behaviour tests ---
 
-    "create a new customer and get it" in {
-      val createCustomer = FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "functional@test.com"))
-      val response = route(app, createCustomer).get
-      status(response) mustBe CREATED
-      contentAsJson(response) mustBe Json.obj("email" -> "functional@test.com")
-
-      val getCustomerById = FakeRequest(GET, "/api/v1/customers/functional@test.com")
-        .withHeaders(authHeader())
-      val getResponse = route(app, getCustomerById).get
-      status(getResponse) mustBe OK
-      contentAsJson(getResponse) mustBe Json.obj("email" -> "functional@test.com")
-    }
-
-    "return 404 when getting a non-existent customer" in {
-      val request = FakeRequest(GET, "/api/v1/customers/nonexistent@test.com")
-        .withHeaders(authHeader())
-      val response = route(app, request).get
-      status(response) mustBe NOT_FOUND
-      (contentAsJson(response) \ "error").as[String] must include("nonexistent@test.com")
-    }
-
     "return 409 when creating a duplicate customer" in {
       val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "duplicate@test.com"))
-      route(app, request).get
+      status(route(app, request).get) mustBe CREATED
 
       val duplicate = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
@@ -92,6 +69,44 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
         .withBody(Json.obj("email" -> JsNull))
       val response = route(app, request).get
       status(response) mustBe BAD_REQUEST
+    }
+
+    "return 401 when DELETE has no Authorization header" in {
+      val request = FakeRequest(DELETE, "/api/v1/customers/test@example.com")
+      val response = route(app, request).get
+      status(response) mustBe UNAUTHORIZED
+    }
+
+    "full lifecycle: create, get, delete, confirm gone" in {
+      // Create
+      val create = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "lifecycle@test.com"))
+      val createResponse = route(app, create).get
+      status(createResponse) mustBe CREATED
+      contentAsJson(createResponse) mustBe Json.obj("email" -> "lifecycle@test.com")
+
+      // Get — exists
+      val get = FakeRequest(GET, "/api/v1/customers/lifecycle@test.com")
+        .withHeaders(authHeader())
+      val getResponse = route(app, get).get
+      status(getResponse) mustBe OK
+      contentAsJson(getResponse) mustBe Json.obj("email" -> "lifecycle@test.com")
+
+      // Delete
+      val delete = FakeRequest(DELETE, "/api/v1/customers/lifecycle@test.com")
+        .withHeaders(authHeader())
+      status(route(app, delete).get) mustBe NO_CONTENT
+
+      // Get — gone
+      val getAfter = FakeRequest(GET, "/api/v1/customers/lifecycle@test.com")
+        .withHeaders(authHeader())
+      status(route(app, getAfter).get) mustBe NOT_FOUND
+
+      // Delete again — not found
+      val deleteAgain = FakeRequest(DELETE, "/api/v1/customers/lifecycle@test.com")
+        .withHeaders(authHeader())
+      status(route(app, deleteAgain).get) mustBe NOT_FOUND
     }
   }
 }

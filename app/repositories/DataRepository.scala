@@ -39,4 +39,12 @@ trait DataRepository[IDENTIFIER, ENTITY] {
    * @return a Future containing Right(list(entity)) if found, or Left(errorMessage) if not
    */
   def findAllByIdentifier(id: IDENTIFIER): Future[Either[String, List[ENTITY]]]
+
+  /**
+   * Delete a resource/entity by its identifier
+   *
+   * @param id the unique identifier of the resource to delete
+   * @return a Future containing Right(()) on success, or Left(errorMessage) if deletion fails
+   */
+  def delete(id: IDENTIFIER): Future[Either[String, Unit]]
 }

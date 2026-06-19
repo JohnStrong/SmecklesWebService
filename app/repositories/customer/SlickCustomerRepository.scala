@@ -33,7 +33,12 @@ class SlickCustomerRepository @Inject()(
       }
       .transactionally // make a single transaction
 
-    db.run(action)
+    db.run(action).recover {
+      case _: org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException =>
+        Left(s"Customer with email ${payload.email} already exists.")
+      case _: java.sql.SQLIntegrityConstraintViolationException =>
+        Left(s"Customer with email ${payload.email} already exists.")
+    }
   }
 
   override def findByIdentifier(id: String): Future[Either[String, Customer]] = {
@@ -52,6 +57,13 @@ class SlickCustomerRepository @Inject()(
         case None => Left(s"Customer with email '$id' not found.")
       }
     db.run(action)
+  }
+
+  override def delete(email: String): Future[Either[String, Unit]] = {
+    db.run(customers.filter(_.email === email).delete).map { // DELETE WHERE == optimistic delete
+      case 0 => Left(s"Customer with email '$email' not found.")
+      case _ => Right(())
+    }
   }
 
   override def findAllByIdentifier(id: String): Future[Either[String, List[Customer]]] = ???

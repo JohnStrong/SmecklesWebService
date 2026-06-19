@@ -1,7 +1,9 @@
 # Get a customer by their email address
-GET     /api/v1/customers/:email controllers.CustomerController.getCustomerByEmail(email: String)
+GET     /api/v1/customers/:email    controllers.CustomerController.getCustomerByEmail(email: String)
 # Create a new customer with an email address
-POST    /api/v1/customers        controllers.CustomerController.createCustomer()
+POST    /api/v1/customers           controllers.CustomerController.createCustomer()
+# Delete a customer/persons
+DELETE /api/v1/customers/:email     controllers.CustomerController.deleteCustomer(email: String)
 
 # Get all shopping list items for a customer
 GET     /api/v1/customers/:email/shopping-lists    controllers.ShoppingListController.getShoppingLists(email: String)

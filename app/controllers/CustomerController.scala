@@ -53,4 +53,11 @@ class CustomerController @Inject()(
       }
     }
   }
+
+  def deleteCustomer(email: String): Action[AnyContent] = authenticated.async { _ =>
+    customerService.deleteCustomer(email).map {
+      case Left(errorMessage) => NotFound(Json.obj("error" -> errorMessage))
+      case Right(_) => NoContent // status-code: 204
+    }
+  }
 }

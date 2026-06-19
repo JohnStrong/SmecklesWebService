@@ -6,6 +6,7 @@ import play.api.Configuration
 import play.api.mvc.*
 import play.api.mvc.BodyParsers
 
+import play.api.libs.json.Json
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -22,5 +23,13 @@ object StubAuth {
       new JwkProviderFactory { def create(): JwkProvider = null }) {
       override def invokeBlock[A](request: Request[A], block: AuthenticatedRequest[A] => Future[Result]): Future[Result] =
         block(AuthenticatedRequest("stub-uid", "stub@test.com", request))
+    }
+
+  /** Rejects every request with 401 — simulates missing/invalid auth token. */
+  def rejectAction(implicit ec: ExecutionContext): AuthenticatedAction =
+    new AuthenticatedAction(null.asInstanceOf[BodyParsers.Default], Configuration("auth.firebase.projectId" -> "test"),
+      new JwkProviderFactory { def create(): JwkProvider = null }) {
+      override def invokeBlock[A](request: Request[A], block: AuthenticatedRequest[A] => Future[Result]): Future[Result] =
+        Future.successful(Results.Unauthorized(Json.obj("error" -> "Missing or malformed Authorization header")))
     }
 }

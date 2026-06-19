@@ -74,4 +74,28 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
       result.left.value should include("not found")
     }
   }
+
+  "delete" should {
+    "delete existing customer and confirm it is no longer in the datastore" in {
+      val userId = insertTestUser()
+      val testCustomer = Customer(email = "delete@example.com", userId = userId)
+      repository.create(testCustomer).futureValue
+
+      val result = repository.delete("delete@example.com").futureValue
+
+      result.value shouldBe ()
+      repository.findByIdentifier("delete@example.com").futureValue.left.value should include("not found")
+    }
+
+    "return error when customer does not exist and leave datastore unchanged" in {
+      val userId = insertTestUser()
+      val existing = Customer(email = "keep@example.com", userId = userId)
+      repository.create(existing).futureValue
+
+      val result = repository.delete("nonexistent@example.com").futureValue
+
+      result.left.value should include("not found")
+      repository.findByIdentifier("keep@example.com").futureValue.value shouldBe existing
+    }
+  }
 }

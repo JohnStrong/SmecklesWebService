@@ -106,6 +106,8 @@ class SlickShoppingListRepository @Inject()(
     db.run(action)
   }
 
+  override def delete(id: String): Future[Either[String, Unit]] = ???
+
   private def findByEmail(email: String) = shoppingLists.filter(_.email === email)
 
   private def findItemsByIdentifier(id: Long) = shoppingListItems.filter(_.shoppingListId === id).result
