@@ -274,6 +274,11 @@ curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
 # → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[...]}]
+
+# 8. Delete customer (disabled until shopping list deletion is implemented)
+# curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+#   "$SERVICE_URL/api/v1/customers/hello@example.com"
+# → 204 No Content
 ```
 
 ## Authentication
@@ -440,6 +445,18 @@ GET /api/v1/customers/:email
 | 200 | `{"email": "user@example.com"}` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 404 | `{"error": "Customer with email ... not found."}` |
+
+### Delete Customer
+
+```
+DELETE /api/v1/customers/:email
+```
+
+| Status | Response |
+|--------|----------|
+| 204 | No content — customer successfully deleted |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 404 | `{"error": "Customer with email '...' not found."}` — customer does not exist |
 
 ### Create Shopping List
 
