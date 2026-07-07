@@ -673,7 +673,8 @@ Or run the production-mode staged build:
 sbt stage
 ./target/universal/stage/bin/simpleshoppinglistapp \
   -Dhttp.port=9000 \
-  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters
+  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters \
+  -Dauth.allowed-emails="you@example.com,another@example.com"
 ```
 
 Get a token (see [Getting a Bearer Token](#getting-a-bearer-token)), then use curl against **http://localhost:9000**:
