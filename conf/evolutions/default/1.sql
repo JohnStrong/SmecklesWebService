@@ -8,7 +8,7 @@ CREATE TABLE users(
 CREATE TABLE customers (
    email VARCHAR(320) PRIMARY KEY,
    user_id BIGINT NOT NULL,
-   FOREIGN KEY (user_id) REFERENCES users(id)
+   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE shopping_lists (
@@ -16,7 +16,7 @@ CREATE TABLE shopping_lists (
     email VARCHAR(320) NOT NULL,
     name VARCHAR(30) NOT NULL,
     UNIQUE(email),
-    FOREIGN KEY (email) REFERENCES customers(email)
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 
 CREATE TABLE shopping_list_items (
@@ -24,7 +24,7 @@ CREATE TABLE shopping_list_items (
      shopping_list_id BIGINT NOT NULL,
      name VARCHAR(30) NOT NULL,
      quantity INT NOT NULL,
-     FOREIGN KEY (shopping_list_id) REFERENCES shopping_lists(id)
+     FOREIGN KEY (shopping_list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
 );
 
 -- !Downs

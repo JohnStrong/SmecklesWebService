@@ -133,5 +133,39 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
         .withHeaders(authHeader())
       status(route(app, deleteAgain).get) mustBe NOT_FOUND
     }
+
+    "cascade delete shopping lists when customer is deleted" in {
+      // Create customer
+      val createCustomer = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "cascade@test.com"))
+      status(route(app, createCustomer).get) mustBe CREATED
+
+      // Create shopping list for that customer
+      val createList = FakeRequest(POST, "/api/v1/customers/cascade@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+        ))
+      status(route(app, createList).get) mustBe CREATED
+
+      // Verify shopping list exists
+      val getListsBefore = FakeRequest(GET, "/api/v1/customers/cascade@test.com/shopping-lists")
+        .withHeaders(authHeader())
+      val listsBefore = contentAsJson(route(app, getListsBefore).get).as[List[JsObject]]
+      listsBefore.length mustBe 1
+
+      // Delete the customer
+      val deleteCustomer = FakeRequest(DELETE, "/api/v1/customers/cascade@test.com")
+        .withHeaders(authHeader())
+      status(route(app, deleteCustomer).get) mustBe NO_CONTENT
+
+      // Verify shopping lists are gone (cascade delete)
+      val getListsAfter = FakeRequest(GET, "/api/v1/customers/cascade@test.com/shopping-lists")
+        .withHeaders(authHeader())
+      val listsAfter = contentAsJson(route(app, getListsAfter).get).as[List[JsObject]]
+      listsAfter mustBe empty
+    }
   }
 }
