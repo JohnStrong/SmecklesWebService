@@ -60,15 +60,21 @@ class AuthenticatedActionSpec extends AnyWordSpec with Matchers {
   }
 
   // Step 3: Create an AuthenticatedAction wired with our mock (no Google, no network)
-  private def createAction(provider: JwkProvider = mockJwkProvider()): AuthenticatedAction = {
-    val config = Configuration("auth.firebase.projectId" -> projectId)
+  private def createAction(
+    provider: JwkProvider = mockJwkProvider(),
+    allowedEmails: String = "test@example.com"
+  ): AuthenticatedAction = {
+    val config = Configuration(
+      "auth.firebase.projectId" -> projectId,
+      "auth.allowed-emails" -> allowedEmails
+    )
     val factory = new JwkProviderFactory { def create(): JwkProvider = provider }
     new AuthenticatedAction(null.asInstanceOf[play.api.mvc.BodyParsers.Default], config, factory)
   }
 
   // Helper: sign a valid token with our local private key (mimics Firebase issuing a token)
   private def validToken(
-    email: String = "user@test.com",
+    email: String = "test@example.com",
     uid: String = "uid-123"
   ): String =
     JWT.create()
@@ -85,7 +91,7 @@ class AuthenticatedActionSpec extends AnyWordSpec with Matchers {
       .withIssuer(s"https://securetoken.google.com/$projectId")
       .withAudience("wrong-project")
       .withSubject("uid-123")
-      .withClaim("email", "user@test.com")
+      .withClaim("email", "test@example.com")
       .withKeyId("test-kid")
       .withExpiresAt(Date.from(Instant.now().plusSeconds(3600)))
       .sign(Algorithm.RSA256(publicKey, privateKey))
@@ -95,7 +101,7 @@ class AuthenticatedActionSpec extends AnyWordSpec with Matchers {
       .withIssuer(s"https://securetoken.google.com/$projectId")
       .withAudience(projectId)
       .withSubject("uid-123")
-      .withClaim("email", "user@test.com")
+      .withClaim("email", "test@example.com")
       .withKeyId("test-kid")
       .withExpiresAt(Date.from(Instant.now().minusSeconds(3600)))
       .sign(Algorithm.RSA256(publicKey, privateKey))
@@ -145,7 +151,7 @@ class AuthenticatedActionSpec extends AnyWordSpec with Matchers {
 
     "pass through with userId and email when token is valid" in {
       val action = createAction()
-      val token = validToken(email = "hello@example.com", uid = "firebase-uid-456")
+      val token = validToken(email = "test@example.com", uid = "firebase-uid-456")
       val request = FakeRequest().withHeaders("Authorization" -> s"Bearer $token")
 
       val result = action.async { req =>
@@ -154,7 +160,18 @@ class AuthenticatedActionSpec extends AnyWordSpec with Matchers {
 
       status(result) shouldBe OK
       (contentAsJson(result) \ "userId").as[String] shouldBe "firebase-uid-456"
-      (contentAsJson(result) \ "email").as[String] shouldBe "hello@example.com"
+      (contentAsJson(result) \ "email").as[String] shouldBe "test@example.com"
+    }
+
+    "return 401 when token is valid but email is not in the allowlist" in {
+      val action = createAction(allowedEmails = "allowed@example.com,admin@example.com")
+      val token = validToken(email = "intruder@example.com", uid = "uid-intruder")
+      val request = FakeRequest().withHeaders("Authorization" -> s"Bearer $token")
+
+      val result = action.async(_ => ???).apply(request)
+
+      status(result) shouldBe UNAUTHORIZED
+      (contentAsJson(result) \ "error").as[String] shouldBe "Access denied: intruder@example.com is not authorized"
     }
   }
 }

@@ -299,7 +299,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ## Authentication
 
-All API endpoints except `/health` require a valid Firebase Auth ID token in the `Authorization` header.
+All API endpoints except `/health` require a valid Firebase Auth ID token in the `Authorization` header **and** the token's email must be present in the configured email allowlist.
 
 ### How It Works
 
@@ -308,9 +308,30 @@ All API endpoints except `/health` require a valid Firebase Auth ID token in the
 3. Frontend sends the token with every request: `Authorization: Bearer <token>`
 4. Backend verifies the token signature against Google's public keys (JWKS)
 5. Backend checks issuer, audience, and expiry
-6. If valid → request proceeds; if invalid → 401 Unauthorized
+6. Backend checks the token's `email` claim against the email allowlist
+7. If valid and allowlisted → request proceeds; otherwise → 401 Unauthorized
 
 The backend uses [auth0/java-jwt](https://github.com/auth0/java-jwt) + [auth0/jwks-rsa](https://github.com/auth0/jwks-rsa-java) for verification. No Firebase Admin SDK required.
+
+### Email Allowlist
+
+Access is restricted to a configured set of email addresses. Only users whose Firebase token `email` claim matches an entry in the allowlist can access protected endpoints.
+
+**Configuration:**
+
+```hocon
+# conf/application.conf
+auth.allowed-emails = "test@example.com"
+auth.allowed-emails = ${?ALLOWED_EMAILS}
+```
+
+In production, the `ALLOWED_EMAILS` environment variable is injected from Google Cloud Secret Manager as a comma-delimited string of permitted emails (e.g. `alice@gmail.com,bob@gmail.com`).
+
+**Behaviour:**
+
+- Matching is case-insensitive and whitespace-tolerant
+- A valid token with a non-allowlisted email returns: `401 {"error": "Access denied: user@example.com is not authorized"}`
+- An empty allowlist denies all access (fail-closed)
 
 ### Getting a Bearer Token
 
@@ -420,7 +441,7 @@ An item within a shopping list.
 
 ## API
 
-> **All endpoints except `/health` require authentication.** Include `Authorization: Bearer <token>` in every request. See [Authentication](#authentication) for how to obtain a token.
+> **All endpoints except `/health` require authentication.** Include `Authorization: Bearer <token>` in every request. The token's email must also be in the configured allowlist. See [Authentication](#authentication) for details.
 
 ### Health Check
 
@@ -448,6 +469,7 @@ Content-Type: application/json
 | 201 | `{"email": "user@example.com"}` |
 | 400 | `{"error": "Email is required"}` — missing, null, or empty string |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 409 | `{"error": "Customer with email ... already exists."}` |
 
 ### Get Customer by Email
@@ -460,6 +482,7 @@ GET /api/v1/customers/:email
 |--------|----------|
 | 200 | `{"email": "user@example.com"}` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Customer with email ... not found."}` |
 
 ### Delete Customer
@@ -472,6 +495,7 @@ DELETE /api/v1/customers/:email
 |--------|----------|
 | 204 | No content — customer successfully deleted |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Customer with email '...' not found."}` — customer does not exist |
 
 ### Create Shopping List
@@ -500,6 +524,7 @@ Validation rules:
 | 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 409 | `{"error": "Shopping list already exists for email ..."}` |
 
 ### Get Shopping Lists
@@ -512,6 +537,7 @@ GET /api/v1/customers/:email/shopping-lists
 |--------|----------|
 | 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}]` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
 
 ### Examples

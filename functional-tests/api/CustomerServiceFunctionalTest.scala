@@ -32,6 +32,31 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
       status(response) mustBe UNAUTHORIZED
     }
 
+    "return 401 when valid token email is not in the allowlist (GET)" in {
+      val request = FakeRequest(GET, "/api/v1/customers/test@example.com")
+        .withHeaders(authHeader("intruder@example.com"))
+      val response = route(app, request).get
+      status(response) mustBe UNAUTHORIZED
+      (contentAsJson(response) \ "error").as[String] mustBe "Access denied: intruder@example.com is not authorized"
+    }
+
+    "return 401 when valid token email is not in the allowlist (POST)" in {
+      val request = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader("intruder@example.com"), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "intruder@example.com"))
+      val response = route(app, request).get
+      status(response) mustBe UNAUTHORIZED
+      (contentAsJson(response) \ "error").as[String] mustBe "Access denied: intruder@example.com is not authorized"
+    }
+
+    "return 401 when valid token email is not in the allowlist (DELETE)" in {
+      val request = FakeRequest(DELETE, "/api/v1/customers/test@example.com")
+        .withHeaders(authHeader("intruder@example.com"))
+      val response = route(app, request).get
+      status(response) mustBe UNAUTHORIZED
+      (contentAsJson(response) \ "error").as[String] mustBe "Access denied: intruder@example.com is not authorized"
+    }
+
     // --- Behaviour tests ---
 
     "return 409 when creating a duplicate customer" in {

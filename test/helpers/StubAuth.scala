@@ -19,7 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 object StubAuth {
   def action(implicit ec: ExecutionContext): AuthenticatedAction =
-    new AuthenticatedAction(null.asInstanceOf[BodyParsers.Default], Configuration("auth.firebase.projectId" -> "test"),
+    new AuthenticatedAction(null.asInstanceOf[BodyParsers.Default], Configuration("auth.firebase.projectId" -> "test", "auth.allowed-emails" -> "stub@test.com"),
       new JwkProviderFactory { def create(): JwkProvider = null }) {
       override def invokeBlock[A](request: Request[A], block: AuthenticatedRequest[A] => Future[Result]): Future[Result] =
         block(AuthenticatedRequest("stub-uid", "stub@test.com", request))
@@ -27,7 +27,7 @@ object StubAuth {
 
   /** Rejects every request with 401 — simulates missing/invalid auth token. */
   def rejectAction(implicit ec: ExecutionContext): AuthenticatedAction =
-    new AuthenticatedAction(null.asInstanceOf[BodyParsers.Default], Configuration("auth.firebase.projectId" -> "test"),
+    new AuthenticatedAction(null.asInstanceOf[BodyParsers.Default], Configuration("auth.firebase.projectId" -> "test", "auth.allowed-emails" -> "stub@test.com"),
       new JwkProviderFactory { def create(): JwkProvider = null }) {
       override def invokeBlock[A](request: Request[A], block: AuthenticatedRequest[A] => Future[Result]): Future[Result] =
         Future.successful(Results.Unauthorized(Json.obj("error" -> "Missing or malformed Authorization header")))

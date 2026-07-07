@@ -17,7 +17,8 @@ case class AuthenticatedRequest[A](userId: String, email: String, request: Reque
   extends WrappedRequest[A](request)
 
 /**
- * Play ActionBuilder that verifies Firebase Auth ID tokens on incoming requests.
+ * Play ActionBuilder that verifies Firebase Auth ID tokens on incoming requests
+ * and enforces an email allowlist for access control.
  *
  * Usage in controllers:
  * {{{
@@ -32,8 +33,12 @@ case class AuthenticatedRequest[A](userId: String, email: String, request: Reque
  *  2. Fetches Google's public signing keys via the injected [[JwkProviderFactory]]
  *  3. Verifies RSA256 signature, issuer, audience, and expiry
  *  4. Extracts `sub` (Firebase UID) and `email` claims
+ *  5. Checks that the token's `email` claim is present in the configured allowlist
+ *     (`auth.allowed-emails` — a comma-delimited string of permitted emails)
  *
- * Returns 401 Unauthorized with a JSON error body if the token is missing, malformed, or invalid.
+ * Returns 401 Unauthorized with a JSON error body if:
+ *  - The token is missing, malformed, or fails signature/issuer/audience/expiry checks
+ *  - The token's email is not in the allowlist (error: "Access denied: <email> is not authorized")
  */
 @Singleton
 class AuthenticatedAction @Inject()(
@@ -43,11 +48,13 @@ class AuthenticatedAction @Inject()(
 )(implicit val executionContext: ExecutionContext) extends ActionBuilder[AuthenticatedRequest, AnyContent] {
 
   private val projectId: String = config.get[String]("auth.firebase.projectId")
+  private val emailAllowList: EmailAllowList = EmailAllowList.apply(config.get[String]("auth.allowed-emails"))
   private val jwkProvider = jwkProviderFactory.create()
 
   /**
-   * Intercepts each request, verifies the Firebase ID token, and either
-   * passes an [[AuthenticatedRequest]] to the controller action or short-circuits with 401.
+   * Intercepts each request, verifies the Firebase ID token, checks the email
+   * against the allowlist, and either passes an [[AuthenticatedRequest]] to the
+   * controller action or short-circuits with 401.
    */
   override def invokeBlock[A](
      request: Request[A],
@@ -57,11 +64,18 @@ class AuthenticatedAction @Inject()(
       case None =>
         Future.successful(Unauthorized(Json.obj("error" -> "Missing or malformed Authorization header")))
       case Some(token) =>
-        verifyToken(token) match
-          case Success(claims) =>
-            block(AuthenticatedRequest(claims.userId, claims.email, request))
+        val result: Try[TokenClaims] = for {
+          claims: TokenClaims <- verifyToken(token)
+          verified <- verifyAccess(claims)
+        } yield verified
+
+        result match {
+          case Success(claims) => block(AuthenticatedRequest(claims.userId, claims.email, request))
+          case Failure(ex: AccessDeniedException) =>
+            Future.successful(Unauthorized(Json.obj("error" -> ex.getMessage)))
           case Failure(ex) =>
             Future.successful(Unauthorized(Json.obj("error" -> s"Invalid token: ${ex.getMessage}")))
+        }
   }
 
   /** Extracts the raw JWT string from an "Authorization: Bearer <token>" header. */
@@ -98,5 +112,13 @@ class AuthenticatedAction @Inject()(
       userId = verified.getSubject,
       email = verified.getClaim("email").asString
     )
+  }
+
+  private def verifyAccess(tokenClaims: TokenClaims): Try[TokenClaims] = {
+    if (emailAllowList.contains(tokenClaims.email)) {
+      Success(tokenClaims)
+    } else {
+      Failure(AccessDeniedException(s"Access denied: ${tokenClaims.email} is not authorized"))
+    }
   }
 }

@@ -32,6 +32,26 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       status(response) mustBe UNAUTHORIZED
     }
 
+    "return 401 when valid token email is not in the allowlist (GET)" in {
+      val request = FakeRequest(GET, "/api/v1/customers/test@example.com/shopping-lists")
+        .withHeaders(authHeader("intruder@example.com"))
+      val response = route(app, request).get
+      status(response) mustBe UNAUTHORIZED
+      (contentAsJson(response) \ "error").as[String] mustBe "Access denied: intruder@example.com is not authorized"
+    }
+
+    "return 401 when valid token email is not in the allowlist (POST)" in {
+      val request = FakeRequest(POST, "/api/v1/customers/test@example.com/shopping-lists")
+        .withHeaders(authHeader("intruder@example.com"), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Sneaky List",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+        ))
+      val response = route(app, request).get
+      status(response) mustBe UNAUTHORIZED
+      (contentAsJson(response) \ "error").as[String] mustBe "Access denied: intruder@example.com is not authorized"
+    }
+
     // --- Behaviour tests ---
 
     "create a shopping list and retrieve it" in {
