@@ -105,6 +105,119 @@ When running multiple Cloud Run instances:
 - Use a distributed lock (e.g. `SELECT ... FOR UPDATE SKIP LOCKED`) or an external trigger (Cloud Scheduler → dedicated cleanup endpoint) to prevent duplicate work
 - Alternatively, design the worker to be idempotent and tolerate concurrent runs (worst case: two workers claim the same entry, one succeeds, the other no-ops)
 
+## Housekeeping: Cleaning the Cleanup Queue Itself
+
+COMPLETED entries are retained for 30 days (audit trail / debugging), then purged by a separate scheduled task:
+
+```sql
+DELETE FROM cleanup_queue
+WHERE status = 'COMPLETED'
+  AND updated_at < NOW() - INTERVAL '30 days';
+```
+
+FAILED entries are retained indefinitely until manually reviewed or resolved.
+
+This housekeeping task can run daily (low frequency, low urgency). It uses the index on `(status, updated_at)` — see below.
+
+## Efficient Querying at Scale
+
+### Indexes
+
+The worker and housekeeping queries always filter by `status` and order by time. A composite index makes both operations index-only scans:
+
+```sql
+-- Worker picks PENDING items oldest-first
+CREATE INDEX idx_cleanup_queue_pending ON cleanup_queue (status, created_at)
+  WHERE status = 'PENDING';
+
+-- Housekeeping finds old COMPLETED items
+CREATE INDEX idx_cleanup_queue_completed ON cleanup_queue (status, updated_at)
+  WHERE status = 'COMPLETED';
+```
+
+Partial indexes (the `WHERE` clause) keep the index small — only rows matching the predicate are indexed. As entries move to COMPLETED/FAILED, they drop out of the PENDING index automatically.
+
+### Query Patterns
+
+Worker (hourly):
+```sql
+SELECT * FROM cleanup_queue
+WHERE status = 'PENDING'
+ORDER BY created_at ASC
+LIMIT 10
+FOR UPDATE SKIP LOCKED;
+```
+
+Housekeeping (daily):
+```sql
+DELETE FROM cleanup_queue
+WHERE status = 'COMPLETED'
+  AND updated_at < NOW() - INTERVAL '30 days';
+```
+
+Both hit their respective partial index directly — no full table scan regardless of table size.
+
+## Capacity Analysis: ~100 Users, TTL-Based Cleanup
+
+This analysis covers the **active customer TTL cleanup** case — resources older than 2 months are queued for deletion after analysis.
+
+### Resource Volume Per User Per Month
+
+| Resource Type | Entries/Month | Notes |
+|---------------|---------------|-------|
+| shopping_lists | 4–5 | Weekly grocery runs, ad-hoc lists |
+| bills | 4–5 | Utilities, phone, internet, etc. |
+| subscriptions | 5 | Streaming, gym, software |
+| one_time_expense | ~5 | Variable — estimated average |
+| rent_mortgage | 1 | Single monthly payment |
+| **Total** | **~20** | Per user, per month |
+
+### Inflow to Cleanup Queue (After 2-Month TTL)
+
+Once resources pass the 2-month threshold, they become eligible for cleanup. After initial ramp-up (first 2 months produce nothing), the queue receives a steady stream:
+
+| Metric | Value |
+|--------|-------|
+| Resources per user per month | ~20 |
+| Users | 100 |
+| New cleanup entries per month | ~2,000 |
+| New cleanup entries per week | ~500 |
+| New cleanup entries per day | ~70 |
+
+### Table Size Over Time
+
+Assuming the worker runs hourly and processes entries within 24 hours, and COMPLETED entries are purged after 30 days:
+
+| State | Typical Count | Notes |
+|-------|---------------|-------|
+| PENDING | 0–70 | Cleared within hours of creation |
+| COMPLETED (retained 30d) | ~2,000 | One month's worth before purge |
+| FAILED (cumulative) | 0–20 | Rare; reviewed manually |
+| **Total at steady state** | **~2,000–2,100** | Dominated by 30-day COMPLETED retention |
+
+### Query Cost
+
+- **Worker (hourly):** `SELECT ... WHERE status = 'PENDING' ORDER BY created_at LIMIT 50` — hits partial index, returns 0–70 rows. Sub-millisecond.
+- **Housekeeping (daily):** `DELETE ... WHERE status = 'COMPLETED' AND updated_at < 30 days` — deletes ~70 rows/day. Negligible.
+- **Total table size:** ~2,000 rows at steady state. PostgreSQL handles this without breaking a sweat — no partitioning or archiving needed.
+
+### Scaling Projections
+
+| Users | Entries/Month | Steady-State Table Size | Acceptable? |
+|-------|---------------|------------------------|-------------|
+| 100 | 2,000 | ~2,000 | ✅ Trivial |
+| 500 | 10,000 | ~10,000 | ✅ Fine |
+| 1,000 | 20,000 | ~20,000 | ✅ Fine |
+| 10,000 | 200,000 | ~200,000 | ⚠️ Consider partitioning or shorter retention |
+
+### When to Evolve
+
+- **<1,000 users:** Current design is more than sufficient
+- **1,000–10,000 users:** Monitor query latency; likely still fine with indexes
+- **10,000+ users:** Consider time-based table partitioning, shorter COMPLETED retention, or moving to a dedicated job queue (e.g. Cloud Tasks)
+
+**Bottom line:** At 100 users with ~20 resources/month each, the table stays around 2,000 rows at steady state. Partial indexes make all queries efficient. This design scales comfortably to thousands of users before needing any architectural changes.
+
 ## Summary
 
 | Scenario | Strategy | Why |
