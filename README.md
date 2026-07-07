@@ -283,9 +283,9 @@ curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
 # → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[...]}]
 
-# 8. Delete customer (disabled until shopping list deletion is implemented)
-# curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-#   "$SERVICE_URL/api/v1/customers/hello@example.com"
+# 8. Delete customer
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 204 No Content
 
 # 9. Delete a customer (use a separate customer to avoid conflicts with shopping list above)
