@@ -207,11 +207,18 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
 # Create and store application secret
 printf "$(openssl rand -base64 64)" | gcloud secrets create play-app-secret --data-file=-
 
+# Create and store email allowlist (comma-delimited list of permitted user emails)
+printf "alice@example.com,bob@example.com" | gcloud secrets create allowed-emails --data-file=-
+
 # Create service account
 gcloud iam service-accounts create smeckles-api-preprod --display-name="Smeckles API Pre-Prod"
 
 # Grant secret access
 gcloud secrets add-iam-policy-binding play-app-secret \
+  --member="serviceAccount:smeckles-api-preprod@smeckles-app-11ca3.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding allowed-emails \
   --member="serviceAccount:smeckles-api-preprod@smeckles-app-11ca3.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
@@ -224,7 +231,7 @@ gcloud run deploy smeckles-api-preprod \
   --region europe-west1 \
   --memory 512Mi --cpu 1 \
   --max-instances 1 --min-instances 0 \
-  --set-secrets "APPLICATION_SECRET=play-app-secret:latest" \
+  --set-secrets "APPLICATION_SECRET=play-app-secret:latest,ALLOWED_EMAILS=allowed-emails:latest" \
   --service-account smeckles-api-preprod@smeckles-app-11ca3.iam.gserviceaccount.com \
   --allow-unauthenticated \
   --port 9000 \
