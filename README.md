@@ -185,7 +185,8 @@ Server starts on **http://localhost:9000** with auto-reloading enabled.
 sbt stage
 ./target/universal/stage/bin/simpleshoppinglistapp \
   -Dhttp.port=9000 \
-  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters
+  -Dplay.http.secret.key=local-testing-secret-that-is-at-least-32-characters \
+  -Dauth.allowed-emails="you@example.com,another@example.com"
 ```
 
 Runs the compiled production artifact locally. Useful for verifying Docker/Cloud Run behaviour without deploying.
