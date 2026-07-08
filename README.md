@@ -22,6 +22,7 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Get Customer by Email](#get-customer-by-email)
   - [Create Shopping List](#create-shopping-list)
   - [Get Shopping Lists](#get-shopping-lists)
+  - [Delete Shopping List](#delete-shopping-list)
   - [Examples](#examples)
 - [Database Configuration](#database-configuration)
   - [Per-Environment Configuration](#per-environment-configuration)
@@ -555,6 +556,7 @@ Deletes a shopping list by its composite key (email + name). The operation is id
 | 204 | No content — shopping list deleted (or did not exist) |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
+| 500 | `{"error": "..."}` — unexpected server error |
 
 ### Examples
 

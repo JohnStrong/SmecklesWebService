@@ -263,29 +263,37 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe NO_CONTENT
     }
 
-    "return 404 when shopping list does not exist" in {
+    "return 204 when shopping list does not exist (idempotent)" in {
       val (controller, mockService) = createFixture()
       when(mockService.delete("user@example.com", "Nonexistent"))
-        .thenReturn(Future.successful(Left("Shopping list 'Nonexistent' not found for customer user@example.com")))
+        .thenReturn(Future.successful(Right(())))
 
       val result = controller.delete("user@example.com", "Nonexistent").apply(FakeRequest())
 
-      status(result) shouldBe NOT_FOUND
-      (contentAsJson(result) \ "error").as[String] should include("not found")
+      status(result) shouldBe NO_CONTENT
     }
 
-    "return 404 when deleting the same shopping list twice" in {
+    "return 204 when deleting the same shopping list twice (idempotent)" in {
       val (controller, mockService) = createFixture()
       when(mockService.delete("user@example.com", "Groceries"))
         .thenReturn(Future.successful(Right(())))
-        .thenReturn(Future.successful(Left("Shopping list 'Groceries' not found for customer user@example.com")))
 
       val firstResult = controller.delete("user@example.com", "Groceries").apply(FakeRequest())
       status(firstResult) shouldBe NO_CONTENT
 
       val secondResult = controller.delete("user@example.com", "Groceries").apply(FakeRequest())
-      status(secondResult) shouldBe NOT_FOUND
-      (contentAsJson(secondResult) \ "error").as[String] should include("not found")
+      status(secondResult) shouldBe NO_CONTENT
+    }
+
+    "return 500 when service returns an error" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.delete("user@example.com", "Groceries"))
+        .thenReturn(Future.successful(Left("Failed to delete shopping list 'Groceries' for customer user@example.com: connection reset")))
+
+      val result = controller.delete("user@example.com", "Groceries").apply(FakeRequest())
+
+      status(result) shouldBe INTERNAL_SERVER_ERROR
+      (contentAsJson(result) \ "error").as[String] should include("Failed to delete")
     }
   }
 }
