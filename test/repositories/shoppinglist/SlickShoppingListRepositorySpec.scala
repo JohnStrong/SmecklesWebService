@@ -34,7 +34,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       ShoppingListItem(name = "Bread", quantity = 1)
     ))
 
-  private def withCustomer(test: => Unit): Unit = {
+  private def withCustomer(test: Long => Any): Unit = {
     // insert a fake user to satisfy FK constraint on customers.user_id
     val dbConfigProvider = app.injector.instanceOf[DatabaseConfigProvider]
     val dbConfig = dbConfigProvider.get[JdbcProfile]
@@ -45,8 +45,10 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     ).futureValue
     // due to foreign key constraint between customers.email <=> shopping_lists.email , we must insert test customer entry
     customerRepository.create(Customer(email = shoppingList.email, userId = userId)).futureValue
-    test
+    test(userId)
   }
+
+  private def withCustomer(test: => Any): Unit = withCustomer((_: Long) => test)
 
   "create" should {
     "insert the shopping list and items into the db" in withCustomer {
@@ -64,6 +66,36 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       val result = repository.create(shoppingList).futureValue
 
       result.left.value should include("already exists")
+    }
+
+    "allow creating two shopping lists with different names for the same customer" in withCustomer {
+      val firstList = shoppingList.copy(name = "Groceries")
+      val secondList = shoppingList.copy(name = "Hardware")
+
+      repository.create(firstList).futureValue.value.name shouldBe "Groceries"
+      repository.create(secondList).futureValue.value.name shouldBe "Hardware"
+
+      val all = repository.findAllByIdentifier(shoppingList.email).futureValue
+      all.value should have length 2
+    }
+
+    "reject creating a shopping list with the same name for the same customer" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val duplicate = shoppingList.copy(items = List(ShoppingListItem("Eggs", 6)))
+      val result = repository.create(duplicate).futureValue
+
+      result.left.value should include("already exists")
+    }
+
+    "allow creating a shopping list with the same name for a different customer" in withCustomer { userId =>
+      customerRepository.create(Customer(email = "other@example.com", userId = userId)).futureValue
+
+      val firstList = ShoppingListWithItems("test@example.com", "Groceries", List(ShoppingListItem("Milk", 1)))
+      val secondList = ShoppingListWithItems("other@example.com", "Groceries", List(ShoppingListItem("Bread", 2)))
+
+      repository.create(firstList).futureValue.value.name shouldBe "Groceries"
+      repository.create(secondList).futureValue.value.name shouldBe "Groceries"
     }
   }
 

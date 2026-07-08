@@ -57,7 +57,7 @@ class SlickShoppingListRepository @Inject()(
 
   override def create(payload: ShoppingListWithItems): Future[Either[String, ShoppingListWithItems]] = {
     val action = (for {
-      existing <- findByEmail(payload.email)
+      existing <- findByEmailAndName(payload.email, payload.name)
         .forUpdate  // lock this row (or the gap where it would be) until this transaction commits... (ensure no duplicate entries)
         .result
         .headOption
@@ -109,6 +109,8 @@ class SlickShoppingListRepository @Inject()(
   override def delete(id: String): Future[Either[String, Unit]] = ???
 
   private def findByEmail(email: String) = shoppingLists.filter(_.email === email)
+
+  private def findByEmailAndName(email: String, name: String) = shoppingLists.filter(sl => sl.email === email && sl.name === name)
 
   private def findItemsByIdentifier(id: Long) = shoppingListItems.filter(_.shoppingListId === id).result
 

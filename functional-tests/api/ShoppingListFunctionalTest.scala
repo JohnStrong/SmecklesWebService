@@ -84,7 +84,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       (lists.head \ "name").as[String] mustBe "Weekly Groceries"
     }
 
-    "return 409 when creating a duplicate shopping list" in {
+    "return 409 when creating a shopping list with the same name for the same customer" in {
       val createCustomer = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "dup-shopper@test.com"))
@@ -93,7 +93,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       val createList = FakeRequest(POST, "/api/v1/customers/dup-shopper@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "name" -> "First List",
+          "name" -> "Groceries",
           "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
         ))
       status(route(app, createList).get) mustBe CREATED
@@ -101,12 +101,68 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       val duplicateList = FakeRequest(POST, "/api/v1/customers/dup-shopper@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
-          "name" -> "Second List",
+          "name" -> "Groceries",
           "items" -> Json.arr(Json.obj("name" -> "Bread", "quantity" -> 1))
         ))
       val duplicateResult = route(app, duplicateList).get
       status(duplicateResult) mustBe CONFLICT
       (contentAsJson(duplicateResult) \ "error").as[String] must include("already exists")
+    }
+
+    "allow creating two shopping lists with different names for the same customer" in {
+      val createCustomer = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "multi-list@test.com"))
+      status(route(app, createCustomer).get) mustBe CREATED
+
+      val firstList = FakeRequest(POST, "/api/v1/customers/multi-list@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+        ))
+      status(route(app, firstList).get) mustBe CREATED
+
+      val secondList = FakeRequest(POST, "/api/v1/customers/multi-list@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Hardware",
+          "items" -> Json.arr(Json.obj("name" -> "Nails", "quantity" -> 20))
+        ))
+      status(route(app, secondList).get) mustBe CREATED
+
+      val getLists = route(app, FakeRequest(GET, "/api/v1/customers/multi-list@test.com/shopping-lists")
+        .withHeaders(authHeader())).get
+      val lists = contentAsJson(getLists).as[List[JsObject]]
+      lists.length mustBe 2
+    }
+
+    "allow creating a shopping list with the same name for a different customer" in {
+      val createAlice = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "alice-unique@test.com"))
+      status(route(app, createAlice).get) mustBe CREATED
+
+      val createBob = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "bob-unique@test.com"))
+      status(route(app, createBob).get) mustBe CREATED
+
+      val aliceList = FakeRequest(POST, "/api/v1/customers/alice-unique@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+        ))
+      status(route(app, aliceList).get) mustBe CREATED
+
+      val bobList = FakeRequest(POST, "/api/v1/customers/bob-unique@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("name" -> "Bread", "quantity" -> 2))
+        ))
+      status(route(app, bobList).get) mustBe CREATED
     }
 
     "return empty list when no shopping lists exist for email" in {
