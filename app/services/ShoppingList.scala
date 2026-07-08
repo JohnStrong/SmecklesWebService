@@ -2,7 +2,6 @@ package services
 
 import models.{ShoppingListItem, ShoppingListWithItems}
 import repositories.DataRepository
-import repositories.shoppinglist.ShoppingListRepository
 
 import scala.concurrent.Future
 import javax.inject.*

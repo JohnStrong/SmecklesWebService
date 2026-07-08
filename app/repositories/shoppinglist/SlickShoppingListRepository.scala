@@ -105,6 +105,8 @@ class SlickShoppingListRepository @Inject()(
 
     db.run(action)
   }
+  
+  
 
   override def delete(id: String): Future[Either[String, Unit]] = ???
 
