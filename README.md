@@ -283,12 +283,17 @@ curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
 # → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[...]}]
 
-# 8. Delete customer
+# 8. Delete shopping list
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries"
+# → 204 No Content
+
+# 9. Delete customer
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 204 No Content
 
-# 9. Confirm customer is gone
+# 10. Confirm customer is gone
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 404 {"error":"Customer with email 'hello@example.com' not found."}
@@ -537,6 +542,20 @@ GET /api/v1/customers/:email/shopping-lists
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
 
+### Delete Shopping List
+
+```
+DELETE /api/v1/customers/:email/shopping-lists/:name
+```
+
+Deletes a shopping list by its composite key (email + name). The operation is idempotent — deleting a list that does not exist returns 204 (not an error).
+
+| Status | Response |
+|--------|----------|
+| 204 | No content — shopping list deleted (or did not exist) |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
+
 ### Examples
 
 ```bash
@@ -559,6 +578,10 @@ curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-l
 # Get all shopping lists for a customer
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists
+
+# Delete a shopping list
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries
 ```
 
 ## Database Configuration
