@@ -3,7 +3,7 @@ import services.{CustomerService, CustomerServiceImpl, ShoppingListService, Shop
 import com.google.inject.{AbstractModule, TypeLiteral}
 import repositories.DataRepository
 import repositories.customer.SlickCustomerRepository
-import repositories.shoppinglist.SlickShoppingListRepository
+import repositories.shoppinglist.{ShoppingListRepository, SlickShoppingListRepository}
 import repositories.user.SlickUserRepository
 import auth.{JwkProviderFactory, GoogleJwkProviderFactory}
 
@@ -24,7 +24,7 @@ class Module extends AbstractModule {
     /**
      * Shopping List
      */
-    bind(new TypeLiteral[DataRepository[String, ShoppingListWithItems]]() {}).to(classOf[SlickShoppingListRepository])
+    bind(classOf[ShoppingListRepository]).to(classOf[SlickShoppingListRepository])
     bind(classOf[ShoppingListService]).to(classOf[ShoppingListServiceImpl])
 
     /**

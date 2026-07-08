@@ -6,7 +6,7 @@ import models.{ShoppingListWithItems, ShoppingListItem}
 import org.scalatest.concurrent.ScalaFutures
 import org.mockito.Mockito.*
 import org.mockito.ArgumentMatchers.*
-import repositories.DataRepository
+import repositories.shoppinglist.ShoppingListRepository
 
 import scala.concurrent.Future
 
@@ -16,7 +16,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
   private val testList = ShoppingListWithItems("user@example.com", "Groceries", testItems)
 
   private def freshService() = {
-    val mockRepo = mock(classOf[DataRepository[String, ShoppingListWithItems]])
+    val mockRepo = mock(classOf[ShoppingListRepository])
     (new ShoppingListServiceImpl(mockRepo), mockRepo)
   }
 
@@ -24,7 +24,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Left with error when no list exists for email" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.findByIdentifier("unknown@example.com"))
+      when(mockRepo.findByEmail("unknown@example.com"))
         .thenReturn(Future.successful(Left("No shopping list found for email unknown@example.com.")))
 
       val result = service.getShoppingList("unknown@example.com").futureValue
@@ -35,7 +35,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Right with shopping list after creation" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.findByIdentifier("user@example.com"))
+      when(mockRepo.findByEmail("user@example.com"))
         .thenReturn(Future.successful(Right(testList)))
 
       val result = service.getShoppingList("user@example.com").futureValue
@@ -48,7 +48,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Right with list of shopping lists" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.findAllByIdentifier("user@example.com"))
+      when(mockRepo.findAllByEmail("user@example.com"))
         .thenReturn(Future.successful(Right(List(testList))))
 
       val result = service.getShoppingLists("user@example.com").futureValue
@@ -58,7 +58,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Right with empty list when no lists exist for email" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.findAllByIdentifier("empty@example.com"))
+      when(mockRepo.findAllByEmail("empty@example.com"))
         .thenReturn(Future.successful(Right(List.empty)))
 
       val result = service.getShoppingLists("empty@example.com").futureValue
@@ -68,7 +68,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Right with empty list when no customer exists with email" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.findAllByIdentifier("unknown@example.com"))
+      when(mockRepo.findAllByEmail("unknown@example.com"))
         .thenReturn(Future.successful(Right(List.empty)))
 
       val result = service.getShoppingLists("unknown@example.com").futureValue

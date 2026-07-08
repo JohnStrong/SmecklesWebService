@@ -1,8 +1,9 @@
 package repositories.shoppinglist
 
-import models.{ShoppingListWithItems, ShoppingListItem}
-import play.api.db.slick.DatabaseConfigProvider
+import models.{ShoppingListItem, ShoppingListWithItems}
+import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
 import repositories.SlickDataRepository
+import slick.jdbc.JdbcProfile
 import slick.lifted.Query
 
 import javax.inject.Inject
@@ -26,8 +27,10 @@ object DecoupledShoppingList {
 }
 
 class SlickShoppingListRepository @Inject()(
-   dbConfigProvider: DatabaseConfigProvider
-)(implicit ec: ExecutionContext) extends SlickDataRepository[String, ShoppingListWithItems](dbConfigProvider) {
+   protected val dbConfigProvider: DatabaseConfigProvider
+)(implicit ec: ExecutionContext)
+  extends ShoppingListRepository
+  with HasDatabaseConfigProvider[JdbcProfile] {
 
   import profile.api.*
 
@@ -57,7 +60,7 @@ class SlickShoppingListRepository @Inject()(
 
   override def create(payload: ShoppingListWithItems): Future[Either[String, ShoppingListWithItems]] = {
     val action = (for {
-      existing <- findByEmailAndName(payload.email, payload.name)
+      existing <- emailAndNameFilter(payload.email, payload.name)
         .forUpdate  // lock this row (or the gap where it would be) until this transaction commits... (ensure no duplicate entries)
         .result
         .headOption
@@ -76,9 +79,9 @@ class SlickShoppingListRepository @Inject()(
     db.run(action)
   }
 
-  override def findByIdentifier(email: String): Future[Either[String, ShoppingListWithItems]] = {
+  override def findByEmail(email: String): Future[Either[String, ShoppingListWithItems]] = {
     val action = (for {
-      shoppingList <- findByEmail(email).result.headOption
+      shoppingList <- emailFilter(email).result.headOption
       result <- shoppingList match {
         case Some (list) => for {
           items <- findItemsByIdentifier(list.id)
@@ -90,9 +93,9 @@ class SlickShoppingListRepository @Inject()(
     db.run(action)
   }
 
-  override def findAllByIdentifier(email: String): Future[Either[String, List[ShoppingListWithItems]]] = {
+  override def findAllByEmail(email: String): Future[Either[String, List[ShoppingListWithItems]]] = {
     val action = for {
-      shoppingLists <- findByEmail(email).result
+      shoppingLists <- emailFilter(email).result
       result <- if (shoppingLists.isEmpty) DBIO.successful(Right(List.empty[ShoppingListWithItems]))
         else {
           val withItems = shoppingLists.map { list =>
@@ -105,14 +108,20 @@ class SlickShoppingListRepository @Inject()(
 
     db.run(action)
   }
-  
-  
 
-  override def delete(id: String): Future[Either[String, Unit]] = ???
+  override def deleteByEmailAndName(email: String, name: String): Future[Either[String, Unit]] = {
+    val action = shoppingLists
+      .filter(sl => sl.email === email && sl.name === name)
+      .delete
+      .map(_ => Right(()))
+    db.run(action).recover {
+      case ex => Left(s"Failed to delete shopping list '$name' for customer $email: ${ex.getMessage}")
+    }
+  }
 
-  private def findByEmail(email: String) = shoppingLists.filter(_.email === email)
+  private def emailFilter(email: String) = shoppingLists.filter(_.email === email)
 
-  private def findByEmailAndName(email: String, name: String) = shoppingLists.filter(sl => sl.email === email && sl.name === name)
+  private def emailAndNameFilter(email: String, name: String) = shoppingLists.filter(sl => sl.email === email && sl.name === name)
 
   private def findItemsByIdentifier(id: Long) = shoppingListItems.filter(_.shoppingListId === id).result
 

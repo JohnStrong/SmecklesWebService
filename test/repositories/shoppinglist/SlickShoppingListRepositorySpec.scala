@@ -56,7 +56,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       result.value.email shouldBe "test@example.com"
       result.value.name shouldBe "test-1"
 
-      val actualStored = repository.findByIdentifier(result.value.email).futureValue
+      val actualStored = repository.findByEmail(result.value.email).futureValue
       actualStored.value shouldBe shoppingList
     }
 
@@ -75,7 +75,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       repository.create(firstList).futureValue.value.name shouldBe "Groceries"
       repository.create(secondList).futureValue.value.name shouldBe "Hardware"
 
-      val all = repository.findAllByIdentifier(shoppingList.email).futureValue
+      val all = repository.findAllByEmail(shoppingList.email).futureValue
       all.value should have length 2
     }
 
@@ -99,42 +99,78 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     }
   }
 
-  "findByIdentifier" should {
+  "findByEmail" should {
     "return the shopping list and items for an entry that exists in the db" in withCustomer {
       val result = repository.create(shoppingList).futureValue
 
-      val stored = repository.findByIdentifier(result.value.email).futureValue
+      val stored = repository.findByEmail(result.value.email).futureValue
 
       stored.value shouldBe shoppingList
     }
 
     "return an error message if the shopping list is not found in the db" in {
-      val stored = repository.findByIdentifier("doesnotexist@example.com").futureValue
+      val stored = repository.findByEmail("doesnotexist@example.com").futureValue
 
       stored.left.value should include("No shopping list found")
     }
   }
 
-  "findAllByIdentifier" should {
+  "findAllByEmail" should {
     "return Right with list of shopping lists for an existing email" in withCustomer {
       repository.create(shoppingList).futureValue
 
-      val result = repository.findAllByIdentifier(shoppingList.email).futureValue
+      val result = repository.findAllByEmail(shoppingList.email).futureValue
 
       result.value should have length 1
       result.value.head shouldBe shoppingList
     }
 
     "return Right with empty list when no customer exists with email" in {
-      val result = repository.findAllByIdentifier("nonexistent@example.com").futureValue
+      val result = repository.findAllByEmail("nonexistent@example.com").futureValue
 
       result.value shouldBe empty
     }
 
     "return Right with empty list when customer exists but has no shopping lists" in withCustomer {
-      val result = repository.findAllByIdentifier(shoppingList.email).futureValue
+      val result = repository.findAllByEmail(shoppingList.email).futureValue
 
       result.value shouldBe empty
+    }
+  }
+
+  "deleteByEmailAndName" should {
+    "delete the shopping list when both email and name match" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val result = repository.deleteByEmailAndName(shoppingList.email, shoppingList.name).futureValue
+      result.value shouldBe (())
+
+      val stored = repository.findAllByEmail(shoppingList.email).futureValue
+      stored.value shouldBe empty
+    }
+
+    "not delete when only email matches but name does not" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      repository.deleteByEmailAndName(shoppingList.email, "Nonexistent").futureValue
+
+      val stored = repository.findAllByEmail(shoppingList.email).futureValue
+      stored.value should have length 1
+    }
+
+    "not delete when only name matches but email does not" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      repository.deleteByEmailAndName("other@example.com", shoppingList.name).futureValue
+
+      val stored = repository.findAllByEmail(shoppingList.email).futureValue
+      stored.value should have length 1
+    }
+
+    "return Right(()) when no matching shopping list exists" in withCustomer {
+      val result = repository.deleteByEmailAndName("nobody@example.com", "Nonexistent").futureValue
+
+      result.value shouldBe (())
     }
   }
 
