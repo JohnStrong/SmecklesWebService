@@ -6,9 +6,11 @@ POST    /api/v1/customers           controllers.CustomerController.createCustome
 DELETE /api/v1/customers/:email     controllers.CustomerController.deleteCustomer(email: String)
 
 # Get all shopping list items for a customer
-GET     /api/v1/customers/:email/shopping-lists    controllers.ShoppingListController.getShoppingLists(email: String)
+GET     /api/v1/customers/:email/shopping-lists         controllers.ShoppingListController.getShoppingLists(email: String)
 # Create a new shopping list for a customer
-POST    /api/v1/customers/:email/shopping-lists    controllers.ShoppingListController.create(email: String)
+POST    /api/v1/customers/:email/shopping-lists         controllers.ShoppingListController.create(email: String)
+# Delete shopping list
+DELETE  /api/v1/customers/:email/shopping-lists/:name   controllers.ShoppingListController.delete(email: String, name: String)
 
 # Health check
 GET     /api/v1/health   controllers.HealthController.check()

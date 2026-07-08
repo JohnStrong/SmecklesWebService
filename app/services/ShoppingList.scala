@@ -14,6 +14,8 @@ trait ShoppingListService {
   def getShoppingLists(email: String): Future[Either[String, List[ShoppingListWithItems]]]
 
   def create(email: String, name: String, items: List[ShoppingListItem]): Future[Either[String, ShoppingListWithItems]]
+
+  def delete(email: String, name: String): Future[Either[String, Unit]]
 }
 
 class ShoppingListServiceImpl @Inject()(
@@ -31,4 +33,6 @@ class ShoppingListServiceImpl @Inject()(
   override def create(email: String, name: String, items: List[ShoppingListItem]): Future[Either[String, ShoppingListWithItems]] = {
     shoppingListRepository.create(ShoppingListWithItems(email, name, items))
   }
+
+  override def delete(email: String, name: String): Future[Either[String, Unit]] = ???
 }

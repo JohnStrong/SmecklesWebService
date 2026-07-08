@@ -43,4 +43,11 @@ class ShoppingListController @Inject()(
         }
       }
     }
+
+  def delete(email: String, name: String): Action[AnyContent] = authenticated.async { _ =>
+    service.delete(email, name).map {
+      case Left(errorMessage) => NotFound(Json.obj("error" -> errorMessage))
+      case Right(_) => NoContent // status 204
+    }
+  }
 }

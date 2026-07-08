@@ -15,7 +15,7 @@ CREATE TABLE shopping_lists (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email VARCHAR(320) NOT NULL,
     name VARCHAR(30) NOT NULL,
-    UNIQUE(email),
+    UNIQUE(email, name),
     FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 
