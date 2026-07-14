@@ -285,6 +285,74 @@ The wants/needs classification can be derived ephemerally in the UX layer by map
 4. Each checked item → `shopping_list_items.status = 'completed'` + new row in `expenses`
 5. Query remaining: `200000 - SUM(completed expenses)` = remaining pence
 
+### Expense Creation: Synchronous Transactional Approach
+
+Expenses are created **in the same database transaction** as the status update. No background jobs, no eventual consistency — the budget remaining is accurate the instant an item is checked off.
+
+#### Marking an item complete
+
+```scala
+def markItemCompleted(itemId: Long): Future[Either[String, Unit]] = {
+  val action = (for {
+    item <- shoppingListItems.filter(_.id === itemId).result.headOption
+    result <- item match {
+      case Some(i) if i.status == "pending" => for {
+        _ <- shoppingListItems.filter(_.id === itemId).map(_.status).update("completed")
+        _ <- expenses += Expense(
+          email = i.email,
+          periodStart = i.periodStart,
+          dayDate = i.dayDate,
+          category = "groceries",
+          description = Some(s"${i.quantity}x item"),
+          amountMinor = i.lineAmountMinor,
+          currencyCode = i.currencyCode,
+          sourceType = "shopping_list_item",
+          sourceId = Some(itemId)
+        )
+      } yield Right(())
+      case Some(_) => DBIO.successful(Left("Item is already completed"))
+      case None => DBIO.successful(Left("Item not found"))
+    }
+  } yield result).transactionally
+
+  db.run(action)
+}
+```
+
+#### Unchecking an item (reversal)
+
+```scala
+def markItemPending(itemId: Long): Future[Either[String, Unit]] = {
+  val action = (for {
+    _ <- shoppingListItems.filter(_.id === itemId).map(_.status).update("pending")
+    _ <- expenses.filter(e => e.sourceType === "shopping_list_item" && e.sourceId === itemId).delete
+  } yield Right(())).transactionally
+
+  db.run(action)
+}
+```
+
+#### Duplicate prevention
+
+Add a unique constraint on expenses to prevent double-counting:
+
+```sql
+CREATE UNIQUE INDEX expenses__source_uniq ON expenses (source_type, source_id) WHERE source_id IS NOT NULL;
+```
+
+This guarantees the same shopping list item (or any source) can never produce two expense rows, even under concurrent requests.
+
+#### Why this approach over a background job
+
+| Concern | Synchronous (chosen) | Background job |
+|---------|---------------------|----------------|
+| Budget accuracy | Immediately consistent | Eventually consistent (stale until job runs) |
+| User experience | Check off item → budget updates instantly | Check off item → budget unchanged for seconds/minutes |
+| Failure handling | Both succeed or both roll back (atomic) | Partial states possible (item complete, expense missing) |
+| Infrastructure | None — just a DB transaction | Scheduler, checkpoint table, retry logic |
+| Complexity | Single method, easy to test | Job orchestration, duplicate detection, offset logic |
+| Scale ceiling | Millions of writes/month before bottleneck | Same — both ultimately do the same INSERT |
+
 ### Design Decisions
 
 1. **Expenses are write-once** — marking an item complete creates an expense; unchecking deletes it (or marks it `cancelled`). This keeps the ledger accurate.
