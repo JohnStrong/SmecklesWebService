@@ -209,7 +209,21 @@ CREATE TABLE customer_budgets (
 
 **Validation rules (service layer):**
 - `period_end` must be after `period_start`
-- Budget periods for the same customer must not overlap
+- **No overlapping budgets (hard requirement):** Before inserting a new budget, the service must verify that no existing budget for the same customer overlaps with the proposed `[period_start, period_end)` range. Two periods overlap if `new_start < existing_end AND new_end > existing_start`.
+
+  **Overlap check query (run before insert):**
+  ```sql
+  SELECT COUNT(*) FROM customer_budgets
+  WHERE email = :email
+    AND period_start < :new_period_end
+    AND period_end > :new_period_start;
+  ```
+  If count > 0, reject with:
+  ```json
+  {"error": "Budget period overlaps with an existing budget (2026-07-01 to 2026-08-01)"}
+  ```
+
+  **Why service layer, not DB constraint:** Range overlap checks cannot be expressed as a simple UNIQUE constraint. PostgreSQL supports exclusion constraints (`EXCLUDE USING gist`) but H2 does not, so enforcement lives in application code.
 
 #### `expenses`
 
