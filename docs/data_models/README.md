@@ -152,6 +152,150 @@ WHERE email = 'shopper@example.com'
 
 ---
 
+## Customer Budget Data Model (Planned)
+
+### Overview
+
+A customer has a **monthly budget** — a fixed amount they plan to spend in a given month. Expenses are tracked independently and linked back to the budget via `period_start`. The **remaining budget** for a month is computed dynamically:
+
+```
+remaining = budget_amount - SUM(completed expenses for that period)
+```
+
+No `remaining` column is stored — it's derived at query time. This avoids stale data and race conditions when multiple expenses are marked as completed concurrently.
+
+### Entity Relationship
+
+```
+customers 1──────┐
+                 │
+                 ├──→ customer_budgets (one per month per customer)
+                 │
+                 └──→ expenses (many per month, various sources)
+                        ↑
+                        │ source examples:
+                        ├── shopping_list_items (when item checked off)
+                        ├── subscriptions (future)
+                        ├── bills (future)
+                        └── one-off payments (future)
+```
+
+### Tables
+
+#### `customer_budgets`
+
+The monthly spending budget for a customer. One row per customer per month.
+
+```sql
+CREATE TABLE customer_budgets (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email          VARCHAR(320) NOT NULL,
+    period_start   DATE NOT NULL,              -- month bucket (always 1st of month)
+    amount_minor   BIGINT NOT NULL,            -- total budget in minor currency units
+    currency_code  CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
+    UNIQUE(email, period_start),
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
+);
+```
+
+#### `expenses`
+
+A unified expense log. Each row represents a single completed cost event, regardless of source. Expenses are only created when an item/event is **marked as completed** by the user.
+
+```sql
+CREATE TABLE expenses (
+    id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email              VARCHAR(320) NOT NULL,
+    period_start       DATE NOT NULL,          -- month bucket (same semantics as budget)
+    day_date           DATE NOT NULL,          -- the day the expense was incurred
+    category           VARCHAR(50) NOT NULL,   -- e.g. 'groceries', 'subscriptions', 'bills', 'one-off'
+    description        VARCHAR(100),           -- human-readable label (e.g. "Milk x2", "Netflix")
+    amount_minor       BIGINT NOT NULL,        -- cost in minor currency units
+    currency_code      CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
+    source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off'
+    source_id          BIGINT,                 -- FK to the originating record (nullable for manual entries)
+    created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
+);
+
+CREATE INDEX expenses__by_email_period ON expenses (email, period_start);
+CREATE INDEX expenses__by_category ON expenses (email, category);
+```
+
+#### `shopping_list_items` — status column addition
+
+Add a `status` column to track whether an item has been checked off:
+
+```sql
+ALTER TABLE shopping_list_items ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending';
+-- Valid values: 'pending', 'completed'
+```
+
+When a shopping list item is marked `completed`, an expense row is created in the `expenses` table with:
+- `source_type = 'shopping_list_item'`
+- `source_id = shopping_list_items.id`
+- `amount_minor = line_amount_minor`
+- `category` derived from the shopping list name or a user-assigned category
+
+### Computing Remaining Budget
+
+The remaining budget for a customer in a given month is a derived value:
+
+```sql
+SELECT
+    b.amount_minor - COALESCE(SUM(e.amount_minor), 0) AS remaining_minor,
+    b.currency_code
+FROM customer_budgets b
+LEFT JOIN expenses e
+    ON e.email = b.email
+    AND e.period_start = b.period_start
+WHERE b.email = 'shopper@example.com'
+  AND b.period_start = DATE '2026-07-01'
+GROUP BY b.amount_minor, b.currency_code;
+```
+
+This approach:
+- **No stored `remaining`** — avoids drift between expense totals and the cached value
+- **Atomic** — marking an item complete + inserting the expense can be wrapped in a single transaction
+- **Auditable** — every expense has a source_type and source_id linking back to the originating record
+- **Extensible** — new expense sources (subscriptions, bills) just insert rows with different `source_type`
+
+### Categories
+
+Categories are strings on the `expenses` table — no separate lookup table for V1. Examples:
+
+| Category | Source types |
+|----------|-------------|
+| `groceries` | shopping_list_item |
+| `household` | shopping_list_item |
+| `subscriptions` | subscription |
+| `bills` | bill |
+| `rent` | bill |
+| `one-off` | one_off |
+
+The wants/needs classification can be derived ephemerally in the UX layer by mapping categories:
+- **Needs**: groceries, bills, rent
+- **Wants**: subscriptions, one-off, household (configurable per user in future)
+
+### Example Flow
+
+1. Customer sets July budget: £2,000 (`amount_minor = 200000`, `currency_code = 'GBP'`)
+2. Customer creates "Weekly Groceries" shopping list for July 5 with items totalling £25.80
+3. User goes shopping, checks off items one by one in the app
+4. Each checked item → `shopping_list_items.status = 'completed'` + new row in `expenses`
+5. Query remaining: `200000 - SUM(completed expenses)` = remaining pence
+
+### Design Decisions
+
+1. **Expenses are write-once** — marking an item complete creates an expense; unchecking deletes it (or marks it `cancelled`). This keeps the ledger accurate.
+
+2. **Single currency per budget** — a customer's monthly budget has one currency. Multi-currency support would require exchange rates (deferred).
+
+3. **No pre-aggregation** — remaining is always computed live. For most users the number of monthly expenses is small enough (< 1000) that this is fast. If performance becomes an issue, a materialised view or cache can be added later.
+
+4. **Category on expense, not on source** — the category lives on the expense row, not on the shopping list or subscription. This allows re-categorisation without touching source tables, and supports manual expense entries that have no source.
+
+
 ## Migration Plans
 
 ### Migration Plan 1: Introduce Shopping List Drafts
