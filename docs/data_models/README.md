@@ -159,29 +159,57 @@ WHERE email = 'shopper@example.com'
 
 ### Overview
 
-A customer has a **monthly budget** — a fixed amount they plan to spend in a given month. Expenses are tracked independently and linked back to the budget via `period_start`. The **remaining budget** for a month is computed dynamically:
+A customer has a **budget** — a fixed amount they plan to spend over a defined period. The budget is the single source of truth for "how much can I spend". All realised costs flow into a unified **expenses ledger** — regardless of where they originated.
 
 ```
-remaining = budget_amount - SUM(completed expenses for that period)
+remaining = budget_amount - SUM(expenses within budget period)
 ```
 
-No `remaining` column is stored — it's derived at query time. This avoids stale data and race conditions when multiple expenses are marked as completed concurrently.
+No `remaining` column is stored — it's derived at query time.
 
-### Entity Relationship
+### Architecture: Source Tables → Expenses Ledger
+
+**Source tables** are domain-specific resources with their own fields, constraints, and processing logic. Each source type defines its own trigger for when a cost becomes a realised expense:
+
+| Source Table | Domain-Specific Fields | Expense Trigger |
+|-------------|----------------------|-----------------|
+| `shopping_list_items` | quantity, unit_amount, status, belongs to a list | User marks item `completed` |
+| `subscriptions` (future) | recurrence, next_due_date, provider, auto_deduct | Due date passes (scheduled check) |
+| `bills` (future) | due_date, provider, reference_number | User confirms paid / due date passes |
+| `one_off_payments` (future) | description, recipient, date | User confirms execution |
+
+**Expenses table** is the unified ledger of *realised* costs. An entry exists here only when the cost has actually been incurred. This is the single table queried to compute remaining budget.
 
 ```
-customers 1──────┐
-                 │
-                 ├──→ customer_budgets (one per month per customer)
-                 │
-                 └──→ expenses (many per month, various sources)
-                        ↑
-                        │ source examples:
-                        ├── shopping_list_items (when item checked off)
-                        ├── subscriptions (future)
-                        ├── bills (future)
-                        └── one-off payments (future)
+┌─────────────────────────┐
+│ shopping_list_items      │──┐
+│ (status = 'completed')  │  │
+└─────────────────────────┘  │
+                              │  INSERT (same transaction)
+┌─────────────────────────┐  │
+│ subscriptions (future)   │──┤──→ ┌──────────────┐
+│ (due_date passed)       │  │    │   expenses    │ ← single query for remaining budget
+└─────────────────────────┘  │    │   (ledger)    │
+                              │    └──────────────┘
+┌─────────────────────────┐  │
+│ bills (future)           │──┤  INSERT (scheduled / manual)
+│ (paid / due date passed)│  │
+└─────────────────────────┘  │
+                              │
+┌─────────────────────────┐  │
+│ one_off_payments (future)│──┘
+│ (confirmed)             │
+└─────────────────────────┘
 ```
+
+### Why a unified expenses ledger (not querying source tables directly)
+
+1. **Single query for remaining** — no UNION across N source tables that grows as you add categories
+2. **Source tables evolve independently** — add columns, constraints, processing logic without touching the budget query
+3. **Auditable** — the ledger shows exactly what was deducted, when, and from which source
+4. **Future automation** — scheduled jobs check source tables for due items and insert into expenses
+5. **Analytics/recommendations** — query one table for spending patterns across all categories
+6. **Manual entries** — expenses with no source (cash purchases, transfers) fit naturally
 
 ### Tables
 
@@ -227,42 +255,103 @@ CREATE TABLE customer_budgets (
 
 #### `expenses`
 
-A unified expense log. Each row represents a single completed cost event, regardless of source. Expenses are only created when an item/event is **marked as completed** by the user.
+The unified expense ledger. Each row represents a **realised** cost — money that has actually left the budget. Entries are created by different triggers depending on the source type, but once in this table they are uniform and queryable in one place.
 
 ```sql
 CREATE TABLE expenses (
     id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email              VARCHAR(320) NOT NULL,
-    period_start       DATE NOT NULL,          -- month bucket (same semantics as budget)
-    day_date           DATE NOT NULL,          -- the day the expense was incurred
+    day_date           DATE NOT NULL,          -- the day the expense was incurred/due
     category           VARCHAR(50) NOT NULL,   -- e.g. 'groceries', 'subscriptions', 'bills', 'one-off'
     description        VARCHAR(100),           -- human-readable label (e.g. "Milk x2", "Netflix")
     amount_minor       BIGINT NOT NULL,        -- cost in minor currency units
     currency_code      CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
-    source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off'
+    source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off', 'manual'
     source_id          BIGINT,                 -- FK to the originating record (nullable for manual entries)
     created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 
-CREATE INDEX expenses__by_email_period ON expenses (email, period_start);
+CREATE INDEX expenses__by_email_day ON expenses (email, day_date);
 CREATE INDEX expenses__by_category ON expenses (email, category);
+CREATE UNIQUE INDEX expenses__source_uniq ON expenses (source_type, source_id) WHERE source_id IS NOT NULL;
 ```
 
-#### `shopping_list_items` — status column addition
+**Key points:**
+- `source_type` + `source_id` link back to the originating record for auditability
+- The unique index on `(source_type, source_id)` prevents duplicate entries from the same source
+- `source_id = NULL` for manual/cash entries with no backing record
+- No `period_start` column — expenses are matched to budgets by `day_date` range at query time
 
-Add a `status` column to track whether an item has been checked off:
+#### `shopping_list_items` — status column (expense trigger)
+
+The `status` column tracks whether an item has been checked off. This is the **trigger** for expense ledger entries:
+
+- `status = 'pending'` → no expense exists for this item
+- `status = 'completed'` → an expense row exists in `expenses` with `source_type = 'shopping_list_item'` and `source_id = item.id`
+
+The status update and expense insertion happen in the **same database transaction** (see Expense Creation below).
 
 ```sql
-ALTER TABLE shopping_list_items ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending';
--- Valid values: 'pending', 'completed'
+-- Already part of shopping_list_items table:
+status VARCHAR(20) NOT NULL DEFAULT 'pending'  -- 'pending' or 'completed'
 ```
 
-When a shopping list item is marked `completed`, an expense row is created in the `expenses` table with:
+Expense row created on completion:
 - `source_type = 'shopping_list_item'`
 - `source_id = shopping_list_items.id`
 - `amount_minor = line_amount_minor`
-- `category` derived from the shopping list name or a user-assigned category
+- `day_date` = parent shopping list's `day_date`
+- `category` = derived from shopping list name or user-assigned
+
+#### Future Source Tables (planned)
+
+Each expense category gets its own resource table with domain-specific fields. These tables are independent of the expenses ledger — they define the *what*, while `expenses` records the *when it was realised*.
+
+```sql
+-- Recurring payments (Netflix, Spotify, gym)
+CREATE TABLE subscriptions (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email          VARCHAR(320) NOT NULL,
+    name           VARCHAR(100) NOT NULL,        -- "Netflix", "Spotify"
+    amount_minor   BIGINT NOT NULL,
+    currency_code  CHAR(3) NOT NULL,
+    recurrence     VARCHAR(20) NOT NULL,          -- 'weekly', 'monthly', 'annual'
+    next_due_date  DATE NOT NULL,
+    auto_deduct    BOOLEAN NOT NULL DEFAULT true, -- auto-insert expense when due
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
+);
+
+-- Utilities, council tax, etc.
+CREATE TABLE bills (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email          VARCHAR(320) NOT NULL,
+    name           VARCHAR(100) NOT NULL,
+    amount_minor   BIGINT NOT NULL,
+    currency_code  CHAR(3) NOT NULL,
+    due_date       DATE NOT NULL,
+    provider       VARCHAR(100),
+    reference      VARCHAR(50),
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
+);
+
+-- Car repairs, gifts, transfers
+CREATE TABLE one_off_payments (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email          VARCHAR(320) NOT NULL,
+    description    VARCHAR(200) NOT NULL,
+    amount_minor   BIGINT NOT NULL,
+    currency_code  CHAR(3) NOT NULL,
+    day_date       DATE NOT NULL,
+    recipient      VARCHAR(100),
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
+);
+```
+
+**Trigger mechanisms:**
+- `subscriptions` → scheduled job checks `next_due_date <= today AND auto_deduct = true`, inserts expense, advances `next_due_date`
+- `bills` → user marks as paid (manual) or scheduled check if `due_date` passes
+- `one_off_payments` → user confirms execution, expense inserted immediately
 
 ### Computing Remaining Budget
 
@@ -312,11 +401,20 @@ The wants/needs classification can be derived ephemerally in the UX layer by map
 
 ### Example Flow
 
+**Shopping list item (synchronous, user-triggered):**
 1. Customer sets July budget: £2,000 (`amount_minor = 200000`, `currency_code = 'GBP'`)
 2. Customer creates "Weekly Groceries" shopping list for July 5 with items totalling £25.80
-3. User goes shopping, checks off items one by one in the app
-4. Each checked item → `shopping_list_items.status = 'completed'` + new row in `expenses`
-5. Query remaining: `200000 - SUM(completed expenses)` = remaining pence
+3. User goes shopping, checks off "Milk" → in same transaction: `status = 'completed'` + expense row inserted
+4. User checks off "Bread" → same pattern
+5. Query remaining: `200000 - SUM(expenses where day_date in [2026-07-01, 2026-08-01))` = remaining pence
+6. User unchecks "Bread" (changed mind) → in same transaction: `status = 'pending'` + expense row deleted
+
+**Subscription (future, scheduled):**
+1. "Netflix" subscription exists with `next_due_date = 2026-07-15`, `auto_deduct = true`
+2. Scheduled job runs daily, finds Netflix due today
+3. Inserts expense (`source_type = 'subscription'`, `source_id = netflix.id`)
+4. Advances `next_due_date` to 2026-08-15
+5. Budget remaining automatically reflects the deduction
 
 ### Expense Creation: Synchronous Transactional Approach
 
@@ -367,13 +465,7 @@ def markItemPending(itemId: Long): Future[Either[String, Unit]] = {
 
 #### Duplicate prevention
 
-Add a unique constraint on expenses to prevent double-counting:
-
-```sql
-CREATE UNIQUE INDEX expenses__source_uniq ON expenses (source_type, source_id) WHERE source_id IS NOT NULL;
-```
-
-This guarantees the same shopping list item (or any source) can never produce two expense rows, even under concurrent requests.
+The unique index `expenses__source_uniq` on `(source_type, source_id) WHERE source_id IS NOT NULL` (defined in the expenses table above) guarantees the same shopping list item (or any source) can never produce two expense rows, even under concurrent requests.
 
 #### Why this approach over a background job
 
