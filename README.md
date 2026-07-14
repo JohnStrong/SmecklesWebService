@@ -21,6 +21,9 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Create Customer](#create-customer)
   - [Get Customer by Email](#get-customer-by-email)
   - [Delete Customer](#delete-customer)
+  - [Create Customer Budget](#create-customer-budget-planned)
+  - [Update Customer Budget](#update-customer-budget-planned)
+  - [Delete Customer Budget](#delete-customer-budget-planned)
   - [Create Shopping List](#create-shopping-list)
   - [Get Shopping Lists](#get-shopping-lists)
   - [Delete Shopping List](#delete-shopping-list)
@@ -447,6 +450,71 @@ DELETE /api/v1/customers/:email
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Customer with email '...' not found."}` — customer does not exist |
+
+### Create Customer Budget (PLANNED)
+
+```
+POST /api/v1/customers/:email/budgets
+Content-Type: application/json
+
+{
+  "period_start": "2026-07-01",
+  "period_end": "2026-08-01",
+  "amount_minor": 200000,
+  "currency_code": "GBP"
+}
+```
+
+Creates a budget for the customer over a defined period. Periods must not overlap with existing budgets for the same customer.
+
+Validation rules:
+- `period_start` — required
+- `period_end` — required, must be after `period_start`
+- `amount_minor` — required, must be ≥ 0
+- `currency_code` — required, must be exactly 3 characters (ISO 4217)
+- No overlapping periods for the same customer
+
+| Status | Response |
+|--------|----------|
+| 201 | `{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 200000, "currency_code": "GBP"}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
+| 409 | `{"error": "Budget period overlaps with an existing budget (2026-07-01 to 2026-08-01)"}` |
+
+### Update Customer Budget (PLANNED)
+
+```
+PUT /api/v1/customers/:email/budgets/:period_start
+Content-Type: application/json
+
+{"amount_minor": 250000, "currency_code": "GBP"}
+```
+
+Replaces the amount and currency of an existing budget. Uses PUT (not PATCH) because the request is idempotent and always provides the complete set of mutable fields. Period dates are immutable — delete and recreate to change the period.
+
+| Status | Response |
+|--------|----------|
+| 200 | `{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 250000, "currency_code": "GBP"}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
+| 404 | `{"error": "No budget found for period starting 2026-07-01"}` |
+
+### Delete Customer Budget (PLANNED)
+
+```
+DELETE /api/v1/customers/:email/budgets/:period_start
+```
+
+Deletes a budget by its period start date. Does not delete associated expenses (expenses are historical records).
+
+| Status | Response |
+|--------|----------|
+| 204 | No content — budget deleted |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
+| 404 | `{"error": "No budget found for period starting 2026-07-01"}` |
 
 ### Create Shopping List
 
