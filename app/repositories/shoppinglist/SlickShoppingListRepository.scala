@@ -25,7 +25,8 @@ case class DecoupledShoppingListItem(
   quantity: Int,
   currencyCode: String,
   unitAmountMinor: Long,
-  lineAmountMinor: Long
+  lineAmountMinor: Long,
+  status: String
 )
 
 object DecoupledShoppingList {
@@ -40,7 +41,8 @@ object DecoupledShoppingList {
         quantity = i.quantity,
         currencyCode = i.currencyCode,
         unitAmountMinor = i.unitAmountMinor,
-        lineAmountMinor = i.lineAmountMinor
+        lineAmountMinor = i.lineAmountMinor,
+        status = i.status
       )).toList
     )
 }
@@ -72,8 +74,9 @@ class SlickShoppingListRepository @Inject()(
     def currencyCode = column[String]("currency_code")
     def unitAmountMinor = column[Long]("unit_amount_minor")
     def lineAmountMinor = column[Long]("line_amount_minor")
+    def status = column[String]("status")
 
-    def * = (id, shoppingListId, name, quantity, currencyCode, unitAmountMinor, lineAmountMinor) <> (DecoupledShoppingListItem.apply, DecoupledShoppingListItem.unapply)
+    def * = (id, shoppingListId, name, quantity, currencyCode, unitAmountMinor, lineAmountMinor, status) <> (DecoupledShoppingListItem.apply, DecoupledShoppingListItem.unapply)
 
     def shoppingListFK = foreignKey("fk_list", shoppingListId, shoppingLists)(_.id, onDelete = ForeignKeyAction.Cascade)
   }
@@ -138,6 +141,47 @@ class SlickShoppingListRepository @Inject()(
     }
   }
 
+  override def updateItemStatus(email: String, listName: String, itemName: String, status: String): Future[Either[String, ShoppingListItem]] = {
+    val action = (for {
+      // Find the shopping list by email and name
+      listOpt <- shoppingLists.filter(sl => sl.email === email && sl.name === listName).result.headOption
+      result <- listOpt match {
+        case None => DBIO.successful(Left("Item not found"))
+        case Some(list) =>
+          // Find the item by name within this list
+          val itemQuery = shoppingListItems.filter(i => i.shoppingListId === list.id && i.name === itemName)
+          for {
+            itemOpt <- itemQuery.result.headOption
+            res <- itemOpt match {
+              case None => DBIO.successful(Left("Item not found"))
+              case Some(item) if item.status == status =>
+                DBIO.successful(Right(ShoppingListItem(
+                  name = item.name,
+                  quantity = item.quantity,
+                  currencyCode = item.currencyCode,
+                  unitAmountMinor = item.unitAmountMinor,
+                  lineAmountMinor = item.lineAmountMinor,
+                  status = item.status
+                )))
+              case Some(item) =>
+                for {
+                  _ <- itemQuery.map(_.status).update(status)
+                } yield Right(ShoppingListItem(
+                  name = item.name,
+                  quantity = item.quantity,
+                  currencyCode = item.currencyCode,
+                  unitAmountMinor = item.unitAmountMinor,
+                  lineAmountMinor = item.lineAmountMinor,
+                  status = status
+                ))
+            }
+          } yield res
+      }
+    } yield result).transactionally
+
+    db.run(action)
+  }
+
   private def emailFilter(email: String) = shoppingLists.filter(_.email === email)
 
   private def emailDayAndNameFilter(email: String, dayDate: LocalDate, name: String) =
@@ -156,7 +200,8 @@ class SlickShoppingListRepository @Inject()(
       i.quantity,
       i.currencyCode,
       i.unitAmountMinor,
-      i.lineAmountMinor
+      i.lineAmountMinor,
+      i.status
     ))
   }
 }

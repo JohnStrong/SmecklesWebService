@@ -53,8 +53,18 @@ class ShoppingListController @Inject()(
     }
   }
 
-  def updateItemStatus(email: String, name: String, itemName: String): Action[AnyContent] = authenticated.async { _ =>
-    Future.successful(NotImplemented(Json.obj("error" -> "Update item status is not yet implemented")))
+  def updateItemStatus(email: String, name: String, itemName: String): Action[JsValue] = authenticated.async(parse.json) { request =>
+    val statusOpt = (request.body \ "status").asOpt[String]
+    statusOpt match {
+      case None => Future.successful(BadRequest(Json.obj("error" -> "Invalid status value")))
+      case Some(status) =>
+        service.updateItemStatus(email, name, itemName, status).map {
+          case Right(item) => Ok(Json.toJson(item))
+          case Left(msg) if msg == "Invalid status value" => BadRequest(Json.obj("error" -> msg))
+          case Left(msg) if msg == "Item not found" => NotFound(Json.obj("error" -> msg))
+          case Left(msg) => InternalServerError(Json.obj("error" -> msg))
+        }
+    }
   }
 
   private def createShoppingListFromReq(email: String, request: ShoppingListCreateRequest): ShoppingListWithItems = {

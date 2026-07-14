@@ -602,7 +602,8 @@ Valid status values: `pending`, `completed`.
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Item not found"}` — item name does not exist within this shopping list |
-| 409 | `{"error": "Item is already completed"}` — item already has the requested status |
+
+The operation is idempotent — setting an item to its current status returns 200 with the unchanged item.
 
 ### Examples
 

@@ -110,4 +110,48 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
       result.left.toOption.get should include("already exists")
     }
   }
+
+  "updateItemStatus" should {
+
+    "return Right with updated item when status is valid" in {
+      val (service, mockRepo) = freshService()
+      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      when(mockRepo.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
+        .thenReturn(Future.successful(Right(updatedItem)))
+
+      val result = service.updateItemStatus("user@example.com", "Groceries", "Milk", "completed").futureValue
+
+      result shouldBe Right(updatedItem)
+    }
+
+    "return Left when status is invalid (without calling repo)" in {
+      val (service, mockRepo) = freshService()
+
+      val result = service.updateItemStatus("user@example.com", "Groceries", "Milk", "invalid").futureValue
+
+      result shouldBe Left("Invalid status value")
+      verify(mockRepo, never()).updateItemStatus(any(), any(), any(), any())
+    }
+
+    "return Left when repo returns item not found" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
+        .thenReturn(Future.successful(Left("Item not found")))
+
+      val result = service.updateItemStatus("user@example.com", "Groceries", "Milk", "completed").futureValue
+
+      result shouldBe Left("Item not found")
+    }
+
+    "return Right when item already has the requested status (idempotent)" in {
+      val (service, mockRepo) = freshService()
+      val item = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      when(mockRepo.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
+        .thenReturn(Future.successful(Right(item)))
+
+      val result = service.updateItemStatus("user@example.com", "Groceries", "Milk", "completed").futureValue
+
+      result shouldBe Right(item)
+    }
+  }
 }

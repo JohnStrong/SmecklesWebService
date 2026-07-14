@@ -392,4 +392,95 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       (contentAsJson(result) \ "error").as[String] should include("Failed to delete")
     }
   }
+
+  "updateItemStatus" should {
+
+    "return 200 with updated item when marking as completed" in {
+      val (controller, mockService) = createFixture()
+      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
+        .thenReturn(Future.successful(Right(updatedItem)))
+
+      val request = FakeRequest(PATCH, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "completed"))
+      val result = controller.updateItemStatus("user@example.com", "Groceries", "Milk").apply(request)
+
+      status(result) shouldBe OK
+      val json = contentAsJson(result)
+      (json \ "name").as[String] shouldBe "Milk"
+      (json \ "status").as[String] shouldBe "completed"
+      (json \ "line_amount_minor").as[Long] shouldBe 258L
+    }
+
+    "return 200 when reverting to pending" in {
+      val (controller, mockService) = createFixture()
+      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "pending")
+      when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "pending"))
+        .thenReturn(Future.successful(Right(updatedItem)))
+
+      val request = FakeRequest(PATCH, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "pending"))
+      val result = controller.updateItemStatus("user@example.com", "Groceries", "Milk").apply(request)
+
+      status(result) shouldBe OK
+      (contentAsJson(result) \ "status").as[String] shouldBe "pending"
+    }
+
+    "return 400 when status field is missing" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(PATCH, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("bad" -> "data"))
+      val result = controller.updateItemStatus("user@example.com", "Groceries", "Milk").apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+      (contentAsJson(result) \ "error").as[String] shouldBe "Invalid status value"
+    }
+
+    "return 400 when status is invalid" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "invalid"))
+        .thenReturn(Future.successful(Left("Invalid status value")))
+
+      val request = FakeRequest(PATCH, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "invalid"))
+      val result = controller.updateItemStatus("user@example.com", "Groceries", "Milk").apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+      (contentAsJson(result) \ "error").as[String] shouldBe "Invalid status value"
+    }
+
+    "return 404 when item not found" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.updateItemStatus("user@example.com", "Groceries", "Nonexistent", "completed"))
+        .thenReturn(Future.successful(Left("Item not found")))
+
+      val request = FakeRequest(PATCH, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "completed"))
+      val result = controller.updateItemStatus("user@example.com", "Groceries", "Nonexistent").apply(request)
+
+      status(result) shouldBe NOT_FOUND
+      (contentAsJson(result) \ "error").as[String] shouldBe "Item not found"
+    }
+
+    "return 200 when item already has the requested status (idempotent)" in {
+      val (controller, mockService) = createFixture()
+      val item = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
+        .thenReturn(Future.successful(Right(item)))
+
+      val request = FakeRequest(PATCH, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "completed"))
+      val result = controller.updateItemStatus("user@example.com", "Groceries", "Milk").apply(request)
+
+      status(result) shouldBe OK
+      (contentAsJson(result) \ "status").as[String] shouldBe "completed"
+    }
+  }
 }

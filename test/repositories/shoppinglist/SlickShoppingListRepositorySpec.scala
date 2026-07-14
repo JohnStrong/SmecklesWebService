@@ -190,4 +190,58 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     }
   }
 
+  "updateItemStatus" should {
+
+    "update an item from pending to completed" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val result = repository.updateItemStatus("test@example.com", "test-1", "Milk", "completed").futureValue
+
+      result.value.name shouldBe "Milk"
+      result.value.status shouldBe "completed"
+    }
+
+    "update an item from completed back to pending" in withCustomer {
+      repository.create(shoppingList).futureValue
+      repository.updateItemStatus("test@example.com", "test-1", "Milk", "completed").futureValue
+
+      val result = repository.updateItemStatus("test@example.com", "test-1", "Milk", "pending").futureValue
+
+      result.value.status shouldBe "pending"
+    }
+
+    "return Left when shopping list does not exist" in withCustomer {
+      val result = repository.updateItemStatus("test@example.com", "nonexistent", "Milk", "completed").futureValue
+
+      result.left.value shouldBe "Item not found"
+    }
+
+    "return Left when item does not exist in the list" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val result = repository.updateItemStatus("test@example.com", "test-1", "Nonexistent", "completed").futureValue
+
+      result.left.value shouldBe "Item not found"
+    }
+
+    "return Right when item already has the requested status (idempotent)" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val result = repository.updateItemStatus("test@example.com", "test-1", "Milk", "pending").futureValue
+
+      result.value.status shouldBe "pending"
+    }
+
+    "preserve the item's monetary values after status update" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val result = repository.updateItemStatus("test@example.com", "test-1", "Milk", "completed").futureValue
+
+      result.value.quantity shouldBe 2
+      result.value.currencyCode shouldBe "GBP"
+      result.value.unitAmountMinor shouldBe 129L
+      result.value.lineAmountMinor shouldBe 258L
+    }
+  }
+
 }

@@ -260,5 +260,122 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withBody(validCreateBody(items = items))
       status(route(app, request).get) mustBe BAD_REQUEST
     }
+
+    // --- Update Item Status (PATCH) tests ---
+
+    "mark an item as completed and return 200 with updated item" in {
+      // Setup: create customer + shopping list
+      status(route(app, FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "patcher@test.com"))).get) mustBe CREATED
+
+      status(route(app, FakeRequest(POST, "/api/v1/customers/patcher@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(validCreateBody(name = "Groceries", items = Json.arr(
+          validItemJson(name = "Milk", quantity = 2, unitAmountMinor = 129L)
+        )))).get) mustBe CREATED
+
+      // Verify item starts as pending
+      val getBefore = route(app, FakeRequest(GET, "/api/v1/customers/patcher@test.com/shopping-lists")
+        .withHeaders(authHeader())).get
+      status(getBefore) mustBe OK
+      val itemsBefore = (contentAsJson(getBefore).as[List[JsObject]].head \ "items").as[List[JsObject]]
+      (itemsBefore.head \ "name").as[String] mustBe "Milk"
+      (itemsBefore.head \ "status").as[String] mustBe "pending"
+
+      // PATCH: mark Milk as completed
+      val patchResult = route(app, FakeRequest(PATCH, "/api/v1/customers/patcher@test.com/shopping-lists/Groceries/items/Milk")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "completed"))).get
+      status(patchResult) mustBe OK
+
+      val json = contentAsJson(patchResult)
+      (json \ "name").as[String] mustBe "Milk"
+      (json \ "status").as[String] mustBe "completed"
+      (json \ "line_amount_minor").as[Long] mustBe 258L
+
+      // Verify the status persists via GET
+      val getAfter = route(app, FakeRequest(GET, "/api/v1/customers/patcher@test.com/shopping-lists")
+        .withHeaders(authHeader())).get
+      status(getAfter) mustBe OK
+      val itemsAfter = (contentAsJson(getAfter).as[List[JsObject]].head \ "items").as[List[JsObject]]
+      (itemsAfter.head \ "name").as[String] mustBe "Milk"
+      (itemsAfter.head \ "status").as[String] mustBe "completed"
+    }
+
+    "revert an item back to pending and return 200" in {
+      status(route(app, FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "reverter@test.com"))).get) mustBe CREATED
+
+      status(route(app, FakeRequest(POST, "/api/v1/customers/reverter@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(validCreateBody(name = "Groceries", items = Json.arr(
+          validItemJson(name = "Bread", quantity = 1, unitAmountMinor = 85L)
+        )))).get) mustBe CREATED
+
+      // Complete then revert
+      status(route(app, FakeRequest(PATCH, "/api/v1/customers/reverter@test.com/shopping-lists/Groceries/items/Bread")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "completed"))).get) mustBe OK
+
+      val revertResult = route(app, FakeRequest(PATCH, "/api/v1/customers/reverter@test.com/shopping-lists/Groceries/items/Bread")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "pending"))).get
+      status(revertResult) mustBe OK
+      (contentAsJson(revertResult) \ "status").as[String] mustBe "pending"
+    }
+
+    "return 200 when item already has the requested status (idempotent)" in {
+      status(route(app, FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "conflict@test.com"))).get) mustBe CREATED
+
+      status(route(app, FakeRequest(POST, "/api/v1/customers/conflict@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(validCreateBody(name = "Groceries", items = Json.arr(
+          validItemJson(name = "Eggs")
+        )))).get) mustBe CREATED
+
+      // Item starts as pending, set pending again — should be a no-op 200
+      val result = route(app, FakeRequest(PATCH, "/api/v1/customers/conflict@test.com/shopping-lists/Groceries/items/Eggs")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "pending"))).get
+      status(result) mustBe OK
+      (contentAsJson(result) \ "status").as[String] mustBe "pending"
+    }
+
+    "return 404 when item name does not exist" in {
+      status(route(app, FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "notfound@test.com"))).get) mustBe CREATED
+
+      status(route(app, FakeRequest(POST, "/api/v1/customers/notfound@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(validCreateBody(name = "Groceries", items = Json.arr(
+          validItemJson(name = "Milk")
+        )))).get) mustBe CREATED
+
+      val result = route(app, FakeRequest(PATCH, "/api/v1/customers/notfound@test.com/shopping-lists/Groceries/items/Nonexistent")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "completed"))).get
+      status(result) mustBe NOT_FOUND
+      (contentAsJson(result) \ "error").as[String] mustBe "Item not found"
+    }
+
+    "return 400 when status value is invalid" in {
+      val result = route(app, FakeRequest(PATCH, "/api/v1/customers/notfound@test.com/shopping-lists/Groceries/items/Milk")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("status" -> "invalid"))).get
+      status(result) mustBe BAD_REQUEST
+      (contentAsJson(result) \ "error").as[String] mustBe "Invalid status value"
+    }
+
+    "return 400 when status field is missing from body" in {
+      val result = route(app, FakeRequest(PATCH, "/api/v1/customers/notfound@test.com/shopping-lists/Groceries/items/Milk")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("bad" -> "data"))).get
+      status(result) mustBe BAD_REQUEST
+    }
   }
 }

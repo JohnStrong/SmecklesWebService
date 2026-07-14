@@ -15,11 +15,15 @@ trait ShoppingListService {
   def create(shoppingListWithItems: ShoppingListWithItems): Future[Either[String, ShoppingListWithItems]]
 
   def delete(email: String, name: String): Future[Either[String, Unit]]
+
+  def updateItemStatus(email: String, listName: String, itemName: String, status: String): Future[Either[String, ShoppingListItem]]
 }
 
 class ShoppingListServiceImpl @Inject()(
     shoppingListRepository: ShoppingListRepository
 ) extends ShoppingListService {
+
+  private val validStatuses = Set("pending", "completed")
 
   override def getShoppingList(email: String): Future[Either[String, ShoppingListWithItems]] = {
     shoppingListRepository.findByEmail(email)
@@ -35,5 +39,12 @@ class ShoppingListServiceImpl @Inject()(
 
   override def delete(email: String, name: String): Future[Either[String, Unit]] = {
     shoppingListRepository.deleteByEmailAndName(email, name)
+  }
+
+  override def updateItemStatus(email: String, listName: String, itemName: String, status: String): Future[Either[String, ShoppingListItem]] = {
+    if (!validStatuses.contains(status))
+      Future.successful(Left("Invalid status value"))
+    else
+      shoppingListRepository.updateItemStatus(email, listName, itemName, status)
   }
 }
