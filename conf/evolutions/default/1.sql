@@ -17,6 +17,7 @@ CREATE TABLE shopping_lists (
     name VARCHAR(30) NOT NULL,
     period_start DATE NOT NULL,          -- month bucket, e.g. 2026-07-01
     day_date DATE NOT NULL,              -- the calendar day this list is for
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- items marked pending or completed
     UNIQUE(email, day_date, name),
     FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
