@@ -219,13 +219,13 @@ curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@exam
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
-# → 201 {"email":"hello@example.com","name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}
+  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
+# → 201 {"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}
 
 # 7. Get shopping lists
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
-# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}]
+# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}]
 
 # 8. Delete shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
@@ -359,15 +359,17 @@ A person managed within the app (e.g. a family member, a flatmate). Scoped to an
 
 #### `shopping_lists`
 
-A named shopping list belonging to a customer.
+A named shopping list belonging to a customer, assigned to a specific day within a month.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `id` | BIGINT | PK, auto-increment | Generated |
 | `email` | VARCHAR(320) | NOT NULL, FK → `customers.email` ON DELETE CASCADE | Owner customer |
 | `name` | VARCHAR(30) | NOT NULL | List display name |
+| `period_start` | DATE | NOT NULL | Month bucket (always 1st of month, e.g. 2026-07-01) |
+| `day_date` | DATE | NOT NULL | The calendar day this list is for |
 
-Composite unique constraint: `UNIQUE(email, name)` — a customer can have multiple lists, but each must have a distinct name.
+Composite unique constraint: `UNIQUE(email, day_date, name)` — the same list name can appear on different days (e.g. "Weekly Groceries" on July 5, 12, 19, 26).
 
 #### `shopping_list_items`
 
@@ -449,6 +451,8 @@ Content-Type: application/json
 
 {
   "name": "Weekly Groceries",
+  "period_start": "2026-07-01",
+  "day_date": "2026-07-05",
   "items": [
     {"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129},
     {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100}
@@ -457,8 +461,10 @@ Content-Type: application/json
 ```
 
 Validation rules:
-- `name` — required, cannot be empty
-- `items` — required, must contain at least one item
+- `name` — required, cannot be empty, max 20 characters
+- `period_start` — required, must be the 1st of the month (e.g. `2026-07-01`)
+- `day_date` — required, must be within the same month as `period_start`
+- `items` — required, must contain at least one item (max 50)
 - Each item `quantity` — required, must be at least 1
 - Each item `currency_code` — required, must be exactly 3 characters (ISO 4217)
 - Each item `unit_amount_minor` — required, must be ≥ 0 (price per unit in minor currency units)
@@ -467,7 +473,7 @@ Validation rules:
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}` |
+| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "period_start": "2026-07-01", "day_date": "2026-07-05", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
@@ -481,7 +487,7 @@ GET /api/v1/customers/:email/shopping-lists
 
 | Status | Response |
 |--------|----------|
-| 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}]` |
+| 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "period_start": "2026-07-01", "day_date": "2026-07-05", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}]` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
@@ -518,7 +524,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
+  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
 
 # Get all shopping lists for a customer
 curl -H "Authorization: Bearer $TOKEN" \

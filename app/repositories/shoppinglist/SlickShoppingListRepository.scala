@@ -6,10 +6,18 @@ import repositories.SlickDataRepository
 import slick.jdbc.JdbcProfile
 import slick.lifted.Query
 
+import java.time.LocalDate
 import javax.inject.Inject
 import scala.concurrent.{ExecutionContext, Future}
 
-case class DecoupledShoppingList(id: Long, email: String, name: String)
+case class DecoupledShoppingList(
+  id: Long,
+  email: String,
+  name: String,
+  periodStart: LocalDate,
+  dayDate: LocalDate
+)
+
 case class DecoupledShoppingListItem(
   id: Long,
   shoppingListId: Long,
@@ -24,6 +32,8 @@ object DecoupledShoppingList {
     ShoppingListWithItems(
       email = shoppingList.email,
       name = shoppingList.name,
+      periodStart = shoppingList.periodStart,
+      dayDate = shoppingList.dayDate,
       items = items.map(i => ShoppingListItem(
         quantity = i.quantity,
         currencyCode = i.currencyCode,
@@ -45,8 +55,10 @@ class SlickShoppingListRepository @Inject()(
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def email = column[String]("email")
     def name = column[String]("name")
+    def periodStart = column[LocalDate]("period_start")
+    def dayDate = column[LocalDate]("day_date")
 
-    def * = (id, email, name) <> (DecoupledShoppingList.apply, DecoupledShoppingList.unapply)
+    def * = (id, email, name, periodStart, dayDate) <> (DecoupledShoppingList.apply, DecoupledShoppingList.unapply)
   }
   private val shoppingLists = TableQuery[ShoppingListsTable]
 
@@ -66,15 +78,15 @@ class SlickShoppingListRepository @Inject()(
 
   override def create(payload: ShoppingListWithItems): Future[Either[String, ShoppingListWithItems]] = {
     val action = (for {
-      existing <- emailAndNameFilter(payload.email, payload.name)
+      existing <- emailDayAndNameFilter(payload.email, payload.dayDate, payload.name)
         .forUpdate
         .result
         .headOption
       result <- existing match {
-        case Some(_) => DBIO.successful(Left(s"Shopping list already exists for email ${payload.email}."))
+        case Some(_) => DBIO.successful(Left(s"Shopping list '${payload.name}' already exists on ${payload.dayDate}."))
         case None =>
           for {
-            listId <- insertShoppingList(payload.email, payload.name)
+            listId <- insertShoppingList(payload.email, payload.name, payload.periodStart, payload.dayDate)
             _ <- insertShoppingListItems(listId, payload.items)
           } yield Right(payload)
       }
@@ -125,12 +137,13 @@ class SlickShoppingListRepository @Inject()(
 
   private def emailFilter(email: String) = shoppingLists.filter(_.email === email)
 
-  private def emailAndNameFilter(email: String, name: String) = shoppingLists.filter(sl => sl.email === email && sl.name === name)
+  private def emailDayAndNameFilter(email: String, dayDate: LocalDate, name: String) =
+    shoppingLists.filter(sl => sl.email === email && sl.dayDate === dayDate && sl.name === name)
 
   private def findItemsByIdentifier(id: Long) = shoppingListItems.filter(_.shoppingListId === id).result
 
-  private def insertShoppingList(email: String, name: String) =
-    (shoppingLists.map(sl => (sl.email, sl.name)) returning shoppingLists.map(_.id)) += (email, name)
+  private def insertShoppingList(email: String, name: String, periodStart: LocalDate, dayDate: LocalDate) =
+    (shoppingLists.map(sl => (sl.email, sl.name, sl.periodStart, sl.dayDate)) returning shoppingLists.map(_.id)) += (email, name, periodStart, dayDate)
 
   private def insertShoppingListItems(shoppingListId: Long, items: List[ShoppingListItem]) = {
     shoppingListItems ++= items.map(i => DecoupledShoppingListItem(

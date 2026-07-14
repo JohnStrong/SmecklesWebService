@@ -8,6 +8,7 @@ import org.mockito.Mockito.*
 import org.mockito.ArgumentMatchers.*
 import repositories.shoppinglist.ShoppingListRepository
 
+import java.time.LocalDate
 import scala.concurrent.Future
 
 class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures {
@@ -16,7 +17,13 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
     ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
     ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
   )
-  private val testList = ShoppingListWithItems("user@example.com", "Groceries", testItems)
+  private val testList = ShoppingListWithItems(
+    email = "user@example.com",
+    name = "Groceries",
+    periodStart = LocalDate.of(2026, 7, 1),
+    dayDate = LocalDate.of(2026, 7, 5),
+    items = testItems
+  )
 
   private def freshService() = {
     val mockRepo = mock(classOf[ShoppingListRepository])
@@ -87,17 +94,17 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
       when(mockRepo.create(any[ShoppingListWithItems]()))
         .thenReturn(Future.successful(Right(testList)))
 
-      val result = service.create("user@example.com", "Groceries", testItems).futureValue
+      val result = service.create(testList).futureValue
 
       result shouldBe Right(testList)
     }
 
-    "return Left with error when list already exists for email" in {
+    "return Left with error when list already exists on same day" in {
       val (service, mockRepo) = freshService()
       when(mockRepo.create(any[ShoppingListWithItems]()))
-        .thenReturn(Future.successful(Left("Shopping list already exists for email user@example.com.")))
+        .thenReturn(Future.successful(Left("Shopping list 'Groceries' already exists on 2026-07-05.")))
 
-      val result = service.create("user@example.com", "Groceries", testItems).futureValue
+      val result = service.create(testList).futureValue
 
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("already exists")

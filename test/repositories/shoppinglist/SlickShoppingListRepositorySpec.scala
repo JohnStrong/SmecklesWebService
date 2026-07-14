@@ -11,6 +11,8 @@ import play.api.db.slick.DatabaseConfigProvider
 import repositories.customer.SlickCustomerRepository
 import slick.jdbc.JdbcProfile
 
+import java.time.LocalDate
+
 class SlickShoppingListRepositorySpec extends AnyWordSpec
   with Matchers
   with ScalaFutures
@@ -28,6 +30,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
   private val shoppingList = ShoppingListWithItems(
     email = "test@example.com",
     name = "test-1",
+    periodStart = LocalDate.of(2026, 7, 1),
+    dayDate = LocalDate.of(2026, 7, 5),
     items = List(
       ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
       ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
@@ -52,12 +56,14 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       val result = repository.create(shoppingList).futureValue
       result.value.email shouldBe "test@example.com"
       result.value.name shouldBe "test-1"
+      result.value.periodStart shouldBe LocalDate.of(2026, 7, 1)
+      result.value.dayDate shouldBe LocalDate.of(2026, 7, 5)
 
       val actualStored = repository.findByEmail(result.value.email).futureValue
       actualStored.value shouldBe shoppingList
     }
 
-    "return an error message if a shopping list already exists for the email" in withCustomer {
+    "return an error message if a shopping list with the same name already exists on the same day" in withCustomer {
       repository.create(shoppingList).futureValue
 
       val result = repository.create(shoppingList).futureValue
@@ -65,7 +71,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       result.left.value should include("already exists")
     }
 
-    "allow creating two shopping lists with different names for the same customer" in withCustomer {
+    "allow creating two shopping lists with different names on the same day" in withCustomer {
       val firstList = shoppingList.copy(name = "Groceries")
       val secondList = shoppingList.copy(name = "Hardware")
 
@@ -76,7 +82,18 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       all.value should have length 2
     }
 
-    "reject creating a shopping list with the same name for the same customer" in withCustomer {
+    "allow creating a shopping list with the same name on a different day" in withCustomer {
+      val list1 = shoppingList.copy(dayDate = LocalDate.of(2026, 7, 5))
+      val list2 = shoppingList.copy(dayDate = LocalDate.of(2026, 7, 12))
+
+      repository.create(list1).futureValue.value.dayDate shouldBe LocalDate.of(2026, 7, 5)
+      repository.create(list2).futureValue.value.dayDate shouldBe LocalDate.of(2026, 7, 12)
+
+      val all = repository.findAllByEmail(shoppingList.email).futureValue
+      all.value should have length 2
+    }
+
+    "reject creating a shopping list with the same name on the same day" in withCustomer {
       repository.create(shoppingList).futureValue
 
       val duplicate = shoppingList.copy(items = List(
@@ -90,15 +107,11 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     "allow creating a shopping list with the same name for a different customer" in withCustomer { userId =>
       customerRepository.create(Customer(email = "other@example.com", userId = userId)).futureValue
 
-      val firstList = ShoppingListWithItems("test@example.com", "Groceries", List(
-        ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 129L)
-      ))
-      val secondList = ShoppingListWithItems("other@example.com", "Groceries", List(
-        ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 200L)
-      ))
+      val firstList = shoppingList.copy(email = "test@example.com")
+      val secondList = shoppingList.copy(email = "other@example.com")
 
-      repository.create(firstList).futureValue.value.name shouldBe "Groceries"
-      repository.create(secondList).futureValue.value.name shouldBe "Groceries"
+      repository.create(firstList).futureValue.value.email shouldBe "test@example.com"
+      repository.create(secondList).futureValue.value.email shouldBe "other@example.com"
     }
   }
 

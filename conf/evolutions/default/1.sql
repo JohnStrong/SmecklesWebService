@@ -15,7 +15,9 @@ CREATE TABLE shopping_lists (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email VARCHAR(320) NOT NULL,
     name VARCHAR(30) NOT NULL,
-    UNIQUE(email, name),
+    period_start DATE NOT NULL,          -- month bucket, e.g. 2026-07-01
+    day_date DATE NOT NULL,              -- the calendar day this list is for
+    UNIQUE(email, day_date, name),
     FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 
@@ -29,6 +31,7 @@ CREATE TABLE shopping_list_items (
      FOREIGN KEY (shopping_list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
 );
 CREATE INDEX shopping_list_items__by_list ON shopping_list_items (shopping_list_id);
+CREATE INDEX shopping_lists__by_email_period ON shopping_lists (email, period_start);
 
 -- !Downs
 DROP TABLE shopping_list_items;

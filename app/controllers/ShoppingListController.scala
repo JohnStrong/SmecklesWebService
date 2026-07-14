@@ -5,6 +5,7 @@ import play.api.mvc.*
 import play.api.libs.json.*
 import play.api.mvc.BaseController
 import models.requests.ShoppingListCreateRequest
+import models.ShoppingListWithItems
 import services.ShoppingListService
 import auth.AuthenticatedAction
 
@@ -37,7 +38,8 @@ class ShoppingListController @Inject()(
           BadRequest(Json.obj("error" -> "Invalid request format", "details" -> JsError.toJson(errors)))
         }
       case JsSuccess(createRequest, _) =>
-        service.create(email, createRequest.name, createRequest.items) map {
+        val shoppingList = createShoppingListFromReq(email, createRequest)
+        service.create(shoppingList) map {
           case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))
           case Right(shoppingList) => Created(Json.toJson(shoppingList))
         }
@@ -49,5 +51,15 @@ class ShoppingListController @Inject()(
       case Right(_) => NoContent
       case Left(errorMessage) => InternalServerError(Json.obj("error" -> errorMessage))
     }
+  }
+
+  private def createShoppingListFromReq(email: String, request: ShoppingListCreateRequest): ShoppingListWithItems = {
+    ShoppingListWithItems(
+      email = email,
+      name = request.name, 
+      dayDate = request.dayDate, 
+      periodStart = request.periodStart,
+      items = request.items
+    )
   }
 }
