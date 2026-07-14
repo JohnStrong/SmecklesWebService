@@ -1,213 +1,154 @@
-## Data model (no `shopping_list_days` table)
+## Data Model (V1)
 
 ```sql
--- Optional: for autocomplete / normalized vocabulary
-CREATE TABLE products (
-  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id     UUID NOT NULL,
-  name        TEXT NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, name)
+CREATE TABLE users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email VARCHAR(320) NOT NULL UNIQUE
 );
 
--- A shopping list is either:
--- - an unassigned draft for a month: day_date IS NULL
--- - assigned to a specific day: day_date NOT NULL
+CREATE TABLE customers (
+    email VARCHAR(320) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE shopping_lists (
-  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id        UUID NOT NULL,
-  period_start  DATE NOT NULL,      -- month bucket, e.g. 2026-07-01
-  day_date      DATE NULL,          -- NULL = unassigned draft, else specific calendar day
-  name           TEXT NOT NULL,     -- user-defined label (supports multiple lists per day)
-
-  status         TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active','cancelled')),
-
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  -- Multiple lists per same day allowed (different name).
-  -- Enforce uniqueness only when the same "slot" matches including name.
-  CONSTRAINT shopping_lists_day_name_uniq
-    UNIQUE (user_id, day_date, name),
-
-  -- But also allow multiple month drafts (different name) when day_date is NULL.
-  -- Since UNIQUE treats NULLs as distinct in Postgres, we add partial unique indexes instead.
-  -- (The constraint above is fine, but you still want correct enforcement for NULL day_date.)
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    email VARCHAR(320) NOT NULL,
+    name VARCHAR(30) NOT NULL,
+    period_start DATE NOT NULL,          -- month bucket, e.g. 2026-07-01
+    day_date DATE NOT NULL,              -- the calendar day this list is for
+    UNIQUE(email, day_date, name),
+    FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 
--- Uniqueness for drafts (day_date IS NULL) — name is required and day_date not set.
-CREATE UNIQUE INDEX shopping_lists_user_period_name_uniq
-ON shopping_lists (user_id, period_start, name)
-WHERE day_date IS NULL;
-
--- Items: money snapshot + per-item store string
 CREATE TABLE shopping_list_items (
-  id                     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  shopping_list_id      BIGINT NOT NULL REFERENCES shopping_lists(id) ON DELETE CASCADE,
-
-  product_id             BIGINT NULL REFERENCES products(id) ON DELETE SET NULL,
-  product_name_snapshot TEXT NOT NULL,
-
-  quantity               NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
-
-  store_name_snapshot    TEXT NULL,      -- user's string; NULL if not provided
-
-  currency_code          CHAR(3) NOT NULL CHECK (char_length(currency_code)=3), -- ISO 4217
-  unit_amount_minor      BIGINT NOT NULL, -- minor units (pence/cents/etc.)
-  line_amount_minor      BIGINT NOT NULL, -- snapshot total
-
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    shopping_list_id   BIGINT NOT NULL,
+    quantity           INT NOT NULL,
+    currency_code      CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3), -- ISO 4217
+    unit_amount_minor  BIGINT NOT NULL,        -- minor units (pence/cents/etc.)
+    line_amount_minor  BIGINT NOT NULL,        -- quantity * unit_amount_minor
+    FOREIGN KEY (shopping_list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
 );
 
 CREATE INDEX shopping_list_items__by_list ON shopping_list_items (shopping_list_id);
-CREATE INDEX shopping_list_items__by_product ON shopping_list_items (product_id);
-CREATE INDEX shopping_lists__by_user_period
-ON shopping_lists (user_id, period_start);
+CREATE INDEX shopping_lists__by_email_period ON shopping_lists (email, period_start);
 ```
 
 ### Notes on uniqueness
-- Multiple lists on the same day are allowed because uniqueness includes `name`.
-- Drafts for a month (`day_date IS NULL`) are unique by `(user_id, period_start, name)` via the partial unique index.
+- Multiple lists on the same day are allowed because uniqueness includes `name` (e.g. "Groceries" and "Top-ups" on July 12).
+- The same list name can appear on different days within the same month (e.g. "Weekly Groceries" on July 5, 12, 19, 26).
+- `period_start` is always the 1st of the month — used for filtering/grouping lists by month.
+- `day_date` is a full DATE (not just a day number) for self-contained queries and direct date comparisons.
 
 ---
 
-## Example inserts
+## Example Inserts
 
 Assume:
-- `user_id = '11111111-1111-1111-1111-111111111111'`
-- `products` table has `Milk`
+- `users` table has a user with `email = 'test@user.com'` (id = 1)
+- `customers` table has `email = 'shopper@example.com'` with `user_id = 1`
 
-### 1) Product vocabulary
+### 1) Create a shopping list for July 5
+
 ```sql
-INSERT INTO products (user_id, name)
-VALUES ('11111111-1111-1111-1111-111111111111', 'Milk')
-RETURNING id;
-```
-
-Assume it returns `product_id = 1`.
-
-### 2) Create an unassigned draft shopping list for July
-```sql
-INSERT INTO shopping_lists (user_id, period_start, day_date, name)
+INSERT INTO shopping_lists (email, name, period_start, day_date)
 VALUES (
-  '11111111-1111-1111-1111-111111111111',
+  'shopper@example.com',
+  'Weekly Groceries',
   DATE '2026-07-01',
-  NULL,
-  'July Draft - Groceries'
+  DATE '2026-07-05'
 )
 RETURNING id;
 ```
 
-Assume `shopping_list.id = 10`.
+Assume it returns `id = 10`.
 
-### 3) Add items to that draft (money + store per item)
-Milk from Tesco, qty 2, £1.29 each:
-- GBP minor units: £1.29 = 129 pence
-- line total: 2 * 129 = 258
+### 2) Add items to that list
+
+Milk, qty 2, £1.29 each (GBP minor units: 129 pence, line total: 2 × 129 = 258):
 
 ```sql
-INSERT INTO shopping_list_items (
-  shopping_list_id,
-  product_id,
-  product_name_snapshot,
-  quantity,
-  store_name_snapshot,
-  currency_code,
-  unit_amount_minor,
-  line_amount_minor
-) VALUES (
-  10,
-  1,
-  'Milk',
-  2,
-  'Tesco',
-  'GBP',
-  129,
-  258
-);
+INSERT INTO shopping_list_items (shopping_list_id, quantity, currency_code, unit_amount_minor, line_amount_minor)
+VALUES (10, 2, 'GBP', 129, 258);
 ```
 
-Free-text item “Bananas” with store not provided:
+Bananas, qty 1, £0.79:
+
 ```sql
-INSERT INTO shopping_list_items (
-  shopping_list_id,
-  product_id,
-  product_name_snapshot,
-  quantity,
-  store_name_snapshot,
-  currency_code,
-  unit_amount_minor,
-  line_amount_minor
-) VALUES (
-  10,
-  NULL,
-  'Bananas',
-  1,
-  NULL,
-  'GBP',
-  79,
-  79
-);
+INSERT INTO shopping_list_items (shopping_list_id, quantity, currency_code, unit_amount_minor, line_amount_minor)
+VALUES (10, 1, 'GBP', 79, 79);
 ```
 
-### 4) Later assign the list to a specific day (e.g., July 12)
-```sql
-UPDATE shopping_lists
-SET day_date = DATE '2026-07-12',
-    updated_at = now()
-WHERE id = 10;
-```
+### 3) Create another "Weekly Groceries" for the following week (July 12)
 
-### 5) Add another list on the same day (allowed because `name` differs)
+Same name, different day — allowed by `UNIQUE(email, day_date, name)`:
+
 ```sql
-INSERT INTO shopping_lists (user_id, period_start, day_date, name)
+INSERT INTO shopping_lists (email, name, period_start, day_date)
 VALUES (
-  '11111111-1111-1111-1111-111111111111',
+  'shopper@example.com',
+  'Weekly Groceries',
   DATE '2026-07-01',
-  DATE '2026-07-12',
-  'Top-ups'
+  DATE '2026-07-12'
 )
 RETURNING id;
 ```
 
-Assume it returns `shopping_list.id = 11`.
+Assume it returns `id = 11`.
 
-Add Milk from Dunness 2 on that day, qty 1, £1.35:
+### 4) Add different items to the July 12 list
+
+Milk ran out again, but also need bread this week:
+
 ```sql
-INSERT INTO shopping_list_items (
-  shopping_list_id,
-  product_id,
-  product_name_snapshot,
-  quantity,
-  store_name_snapshot,
-  currency_code,
-  unit_amount_minor,
-  line_amount_minor
-) VALUES (
-  11,
-  1,
-  'Milk',
-  1,
-  'Dunness 2',
-  'GBP',
-  135,
-  135
-);
+INSERT INTO shopping_list_items (shopping_list_id, quantity, currency_code, unit_amount_minor, line_amount_minor)
+VALUES
+  (11, 1, 'GBP', 129, 129),
+  (11, 1, 'GBP', 85, 85);
 ```
 
-### 6) “Delete the day” behavior (day cancellation without losing history)
-Instead of deleting, cancel lists assigned to that day:
+### 5) Add a second list on the same day with a different name
+
+"Top-ups" on July 12 (allowed because name differs):
+
 ```sql
-UPDATE shopping_lists
-SET status = 'cancelled',
-    updated_at = now()
-WHERE user_id = '11111111-1111-1111-1111-111111111111'
-  AND day_date = DATE '2026-07-12'
-  AND status = 'active';
+INSERT INTO shopping_lists (email, name, period_start, day_date)
+VALUES (
+  'shopper@example.com',
+  'Top-ups',
+  DATE '2026-07-01',
+  DATE '2026-07-12'
+)
+RETURNING id;
 ```
 
-Then in reporting, filter `status='active'` (or treat `cancelled` as excluded).
+### 6) Query all lists for a month
+
+```sql
+SELECT id, name, day_date
+FROM shopping_lists
+WHERE email = 'shopper@example.com'
+  AND period_start = DATE '2026-07-01'
+ORDER BY day_date, name;
+```
+
+Returns:
+| id | name | day_date |
+|----|------|----------|
+| 10 | Weekly Groceries | 2026-07-05 |
+| 11 | Weekly Groceries | 2026-07-12 |
+| 12 | Top-ups | 2026-07-12 |
+
+### 7) Delete a specific list (cascades to items)
+
+```sql
+DELETE FROM shopping_lists
+WHERE email = 'shopper@example.com'
+  AND day_date = DATE '2026-07-05'
+  AND name = 'Weekly Groceries';
+```
 
 ---
 
