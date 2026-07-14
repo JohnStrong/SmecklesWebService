@@ -54,12 +54,14 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
 
     // --- Behaviour tests ---
 
-    "create a shopping list and retrieve it" in {
+    "create a shopping list and retrieve it then delete it" in {
+      // 1. Create a customer
       val createCustomer = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj("email" -> "shopper@test.com"))
       status(route(app, createCustomer).get) mustBe CREATED
 
+      // 2. create the shopping list 'Weekly Groceries'
       val createList = FakeRequest(POST, "/api/v1/customers/shopper@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
@@ -76,12 +78,25 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       (json \ "name").as[String] mustBe "Weekly Groceries"
       (json \ "items").as[List[JsObject]].length mustBe 2
 
+      // 3. Get all shopping lists and assert 'Weekly Groceries' is found
       val getResult = route(app, FakeRequest(GET, "/api/v1/customers/shopper@test.com/shopping-lists")
         .withHeaders(authHeader())).get
       status(getResult) mustBe OK
       val lists = contentAsJson(getResult).as[List[JsObject]]
       lists.length mustBe 1
       (lists.head \ "name").as[String] mustBe "Weekly Groceries"
+
+      // 4. Delete 'Weekly Groceries' list
+      val deleteResult = route(app, FakeRequest(DELETE, "/api/v1/customers/shopper@test.com/shopping-lists/Weekly%20Groceries")
+        .withHeaders(authHeader())).get
+      status(deleteResult) mustBe NO_CONTENT
+
+      // 5. Get all shopping lists and assert 'Weekly Groceries' is not found
+      val getResult2 = route(app, FakeRequest(GET, "/api/v1/customers/shopper@test.com/shopping-lists")
+        .withHeaders(authHeader())).get
+      status(getResult2) mustBe OK
+      val lists2 = contentAsJson(getResult2).as[List[JsObject]]
+      lists2 mustBe empty
     }
 
     "return 409 when creating a shopping list with the same name for the same customer" in {
