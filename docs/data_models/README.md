@@ -187,19 +187,29 @@ customers 1──────┐
 
 #### `customer_budgets`
 
-The monthly spending budget for a customer. One row per customer per month.
+The spending budget for a customer over a defined period. Supports any period length (weekly, fortnightly, monthly, custom). One row per customer per budget period.
 
 ```sql
 CREATE TABLE customer_budgets (
     id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email          VARCHAR(320) NOT NULL,
-    period_start   DATE NOT NULL,              -- month bucket (always 1st of month)
+    period_start   DATE NOT NULL,              -- start of budget window (e.g. 2026-07-01 or 2026-07-07)
+    period_end     DATE NOT NULL,              -- end of budget window (exclusive, e.g. 2026-08-01 or 2026-07-14)
     amount_minor   BIGINT NOT NULL,            -- total budget in minor currency units
     currency_code  CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
     UNIQUE(email, period_start),
     FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 ```
+
+**Period examples:**
+- Monthly: `period_start = 2026-07-01`, `period_end = 2026-08-01`
+- Weekly: `period_start = 2026-07-07`, `period_end = 2026-07-14`
+- Fortnightly: `period_start = 2026-07-01`, `period_end = 2026-07-15`
+
+**Validation rules (service layer):**
+- `period_end` must be after `period_start`
+- Budget periods for the same customer must not overlap
 
 #### `expenses`
 
@@ -242,26 +252,32 @@ When a shopping list item is marked `completed`, an expense row is created in th
 
 ### Computing Remaining Budget
 
-The remaining budget for a customer in a given month is a derived value:
+The remaining budget for a customer in a given period is a derived value:
 
 ```sql
 SELECT
     b.amount_minor - COALESCE(SUM(e.amount_minor), 0) AS remaining_minor,
-    b.currency_code
+    b.currency_code,
+    b.period_start,
+    b.period_end
 FROM customer_budgets b
 LEFT JOIN expenses e
     ON e.email = b.email
-    AND e.period_start = b.period_start
+    AND e.day_date >= b.period_start
+    AND e.day_date < b.period_end
 WHERE b.email = 'shopper@example.com'
   AND b.period_start = DATE '2026-07-01'
-GROUP BY b.amount_minor, b.currency_code;
+GROUP BY b.amount_minor, b.currency_code, b.period_start, b.period_end;
 ```
+
+Expenses are matched by `day_date` falling within the budget's `[period_start, period_end)` range (start-inclusive, end-exclusive). This works for any period length — weekly, monthly, or custom.
 
 This approach:
 - **No stored `remaining`** — avoids drift between expense totals and the cached value
 - **Atomic** — marking an item complete + inserting the expense can be wrapped in a single transaction
 - **Auditable** — every expense has a source_type and source_id linking back to the originating record
 - **Extensible** — new expense sources (subscriptions, bills) just insert rows with different `source_type`
+- **Flexible periods** — same query works regardless of budget duration
 
 ### Categories
 
