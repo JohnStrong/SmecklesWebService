@@ -7,6 +7,10 @@ import play.api.test.Helpers.*
 
 class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTest {
 
+  // Helper to create a valid item JSON (client sends quantity, currency_code, unit_amount_minor only)
+  private def validItemJson(quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
+    Json.obj("quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
+
   "ShoppingListController" should {
 
     // --- Auth tests (self-contained for shopping list endpoints) ---
@@ -20,7 +24,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     "return 401 when POST has no Authorization header" in {
       val request = FakeRequest(POST, "/api/v1/customers/test@example.com/shopping-lists")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("name" -> "Test", "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))))
+        .withBody(Json.obj("name" -> "Test", "items" -> Json.arr(validItemJson())))
       val response = route(app, request).get
       status(response) mustBe UNAUTHORIZED
     }
@@ -45,7 +49,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader("intruder@example.com"), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Sneaky List",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson())
         ))
       val response = route(app, request).get
       status(response) mustBe UNAUTHORIZED
@@ -67,8 +71,8 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withBody(Json.obj(
           "name" -> "Weekly Groceries",
           "items" -> Json.arr(
-            Json.obj("name" -> "Milk", "quantity" -> 2),
-            Json.obj("name" -> "Bread", "quantity" -> 1)
+            validItemJson(quantity = 2, unitAmountMinor = 129L),
+            validItemJson(quantity = 1, unitAmountMinor = 100L)
           )
         ))
       val createResult = route(app, createList).get
@@ -78,13 +82,25 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       (json \ "name").as[String] mustBe "Weekly Groceries"
       (json \ "items").as[List[JsObject]].length mustBe 2
 
-      // 3. Get all shopping lists and assert 'Weekly Groceries' is found
+      // Verify line_amount_minor is computed correctly in the response
+      val items = (json \ "items").as[List[JsObject]]
+      (items.head \ "line_amount_minor").as[Long] mustBe 258L // 2 * 129
+      (items(1) \ "line_amount_minor").as[Long] mustBe 100L   // 1 * 100
+
+      // 3. Get all shopping lists and assert 'Weekly Groceries' is found with correct line amounts
       val getResult = route(app, FakeRequest(GET, "/api/v1/customers/shopper@test.com/shopping-lists")
         .withHeaders(authHeader())).get
       status(getResult) mustBe OK
       val lists = contentAsJson(getResult).as[List[JsObject]]
       lists.length mustBe 1
       (lists.head \ "name").as[String] mustBe "Weekly Groceries"
+
+      // Verify line_amount_minor is quantity * unit_amount_minor on the GET path (round-trip through DB)
+      val getItems = (lists.head \ "items").as[List[JsObject]]
+      (getItems.head \ "currency_code").as[String] mustBe "GBP"
+      (getItems.head \ "line_amount_minor").as[Long] mustBe 258L // 2 * 129
+      (getItems(1) \ "currency_code").as[String] mustBe "GBP"
+      (getItems(1) \ "line_amount_minor").as[Long] mustBe 100L   // 1 * 100
 
       // 4. Delete 'Weekly Groceries' list
       val deleteResult = route(app, FakeRequest(DELETE, "/api/v1/customers/shopper@test.com/shopping-lists/Weekly%20Groceries")
@@ -109,7 +125,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson())
         ))
       status(route(app, createList).get) mustBe CREATED
 
@@ -117,7 +133,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Bread", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson(quantity = 2))
         ))
       val duplicateResult = route(app, duplicateList).get
       status(duplicateResult) mustBe CONFLICT
@@ -134,7 +150,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+          "items" -> Json.arr(validItemJson(quantity = 2, unitAmountMinor = 129L))
         ))
       status(route(app, firstList).get) mustBe CREATED
 
@@ -142,7 +158,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Hardware",
-          "items" -> Json.arr(Json.obj("name" -> "Nails", "quantity" -> 20))
+          "items" -> Json.arr(validItemJson(quantity = 20, unitAmountMinor = 50L))
         ))
       status(route(app, secondList).get) mustBe CREATED
 
@@ -167,7 +183,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson())
         ))
       status(route(app, aliceList).get) mustBe CREATED
 
@@ -175,7 +191,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Bread", "quantity" -> 2))
+          "items" -> Json.arr(validItemJson(quantity = 2, unitAmountMinor = 100L))
         ))
       status(route(app, bobList).get) mustBe CREATED
     }
@@ -192,7 +208,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson())
         ))
       val result = route(app, request).get
       status(result) mustBe BAD_REQUEST
@@ -209,23 +225,34 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       status(result) mustBe BAD_REQUEST
     }
 
-    "return 400 when item name is empty" in {
-      val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj(
-          "name" -> "Test",
-          "items" -> Json.arr(Json.obj("name" -> "", "quantity" -> 1))
-        ))
-      val result = route(app, request).get
-      status(result) mustBe BAD_REQUEST
-    }
-
     "return 400 when item quantity is less than 1" in {
       val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Test",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 0))
+          "items" -> Json.arr(validItemJson(quantity = 0))
+        ))
+      val result = route(app, request).get
+      status(result) mustBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is missing" in {
+      val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Test",
+          "items" -> Json.arr(Json.obj("quantity" -> 1, "unit_amount_minor" -> 100))
+        ))
+      val result = route(app, request).get
+      status(result) mustBe BAD_REQUEST
+    }
+
+    "return 400 when unit_amount_minor is missing" in {
+      val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Test",
+          "items" -> Json.arr(Json.obj("quantity" -> 1, "currency_code" -> "GBP"))
         ))
       val result = route(app, request).get
       status(result) mustBe BAD_REQUEST
@@ -245,14 +272,14 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "a" * 21,
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson())
         ))
       val result = route(app, request).get
       status(result) mustBe BAD_REQUEST
     }
 
     "return 400 when items list exceeds 50 items" in {
-      val items = (1 to 51).map(i => Json.obj("name" -> s"Item $i", "quantity" -> 1))
+      val items = (1 to 51).map(_ => validItemJson())
       val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(

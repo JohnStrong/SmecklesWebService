@@ -15,9 +15,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
   with Matchers
   with ScalaFutures
   with EitherValues
-  with GuiceOneAppPerTest { // each test case creates a new guice app so data is not persisted cross tests
+  with GuiceOneAppPerTest {
 
-  // db timeout config for tests
   implicit val patience: PatienceConfig = PatienceConfig(
     timeout = Span(5, Seconds),
     interval = Span(100, Millis)
@@ -30,12 +29,11 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     email = "test@example.com",
     name = "test-1",
     items = List(
-      ShoppingListItem(name = "Milk", quantity = 2),
-      ShoppingListItem(name = "Bread", quantity = 1)
+      ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
+      ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
     ))
 
   private def withCustomer(test: Long => Any): Unit = {
-    // insert a fake user to satisfy FK constraint on customers.user_id
     val dbConfigProvider = app.injector.instanceOf[DatabaseConfigProvider]
     val dbConfig = dbConfigProvider.get[JdbcProfile]
     import dbConfig.profile.api.*
@@ -43,7 +41,6 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       sqlu"INSERT INTO users (email) VALUES ('test@user.com')"
         .andThen(sql"SELECT id FROM users WHERE email = 'test@user.com'".as[Long].head)
     ).futureValue
-    // due to foreign key constraint between customers.email <=> shopping_lists.email , we must insert test customer entry
     customerRepository.create(Customer(email = shoppingList.email, userId = userId)).futureValue
     test(userId)
   }
@@ -82,7 +79,9 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     "reject creating a shopping list with the same name for the same customer" in withCustomer {
       repository.create(shoppingList).futureValue
 
-      val duplicate = shoppingList.copy(items = List(ShoppingListItem("Eggs", 6)))
+      val duplicate = shoppingList.copy(items = List(
+        ShoppingListItem(quantity = 6, currencyCode = "GBP", unitAmountMinor = 50L, lineAmountMinor = 300L)
+      ))
       val result = repository.create(duplicate).futureValue
 
       result.left.value should include("already exists")
@@ -91,8 +90,12 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     "allow creating a shopping list with the same name for a different customer" in withCustomer { userId =>
       customerRepository.create(Customer(email = "other@example.com", userId = userId)).futureValue
 
-      val firstList = ShoppingListWithItems("test@example.com", "Groceries", List(ShoppingListItem("Milk", 1)))
-      val secondList = ShoppingListWithItems("other@example.com", "Groceries", List(ShoppingListItem("Bread", 2)))
+      val firstList = ShoppingListWithItems("test@example.com", "Groceries", List(
+        ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 129L)
+      ))
+      val secondList = ShoppingListWithItems("other@example.com", "Groceries", List(
+        ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 200L)
+      ))
 
       repository.create(firstList).futureValue.value.name shouldBe "Groceries"
       repository.create(secondList).futureValue.value.name shouldBe "Groceries"

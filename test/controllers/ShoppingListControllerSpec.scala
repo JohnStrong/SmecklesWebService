@@ -23,10 +23,15 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
     (controller, mockService)
   }
 
+  // Default test items using currency fields (line_amount_minor = quantity * unit_amount_minor)
   private val testList = ShoppingListWithItems("test@example.com", "Weekly Groceries", List(
-    ShoppingListItem("Milk", 2),
-    ShoppingListItem("Bread", 1)
+    ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
+    ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
   ))
+
+  // Helper to create a valid item JSON (client sends quantity, currency_code, unit_amount_minor only)
+  private def validItemJson(quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
+    Json.obj("quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
 
   "getShoppingList" should {
 
@@ -65,12 +70,39 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Weekly Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+          "items" -> Json.arr(validItemJson(quantity = 2, unitAmountMinor = 129L))
         ))
       val result = controller.create("user@example.com").apply(request)
 
       status(result) shouldBe CREATED
       (contentAsJson(result) \ "name").as[String] shouldBe "Weekly Groceries"
+    }
+
+    "return computed line_amount_minor (quantity * unit_amount_minor) in the response" in {
+      val (controller, mockService) = createFixture()
+      val listWithComputedLineAmounts = ShoppingListWithItems("user@example.com", "Test", List(
+        ShoppingListItem(quantity = 3, currencyCode = "GBP", unitAmountMinor = 200L, lineAmountMinor = 600L),
+        ShoppingListItem(quantity = 5, currencyCode = "USD", unitAmountMinor = 150L, lineAmountMinor = 750L)
+      ))
+      when(mockService.create(anyString(), anyString(), any())).thenReturn(Future.successful(Right(listWithComputedLineAmounts)))
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Test",
+          "items" -> Json.arr(
+            validItemJson(quantity = 3, unitAmountMinor = 200L),
+            validItemJson(quantity = 5, currencyCode = "USD", unitAmountMinor = 150L)
+          )
+        ))
+      val result = controller.create("user@example.com").apply(request)
+
+      status(result) shouldBe CREATED
+      val items = (contentAsJson(result) \ "items").as[List[JsObject]]
+      (items(0) \ "currency_code").as[String] shouldBe "GBP"
+      (items(0) \ "line_amount_minor").as[Long] shouldBe 600L  // 3 * 200
+      (items(1) \ "currency_code").as[String] shouldBe "USD"
+      (items(1) \ "line_amount_minor").as[Long] shouldBe 750L  // 5 * 150
     }
 
     "return 409 when shopping list already exists" in {
@@ -82,7 +114,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Another List",
-          "items" -> Json.arr(Json.obj("name" -> "Eggs", "quantity" -> 6))
+          "items" -> Json.arr(validItemJson(quantity = 6))
         ))
       val result = controller.create("user@example.com").apply(request)
 
@@ -109,7 +141,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+          "items" -> Json.arr(validItemJson())
         ))
       val result = controller.create("user@example.com").apply(request)
 
@@ -130,20 +162,6 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
 
-    "return 400 when item name is empty" in {
-      val (controller, _) = createFixture()
-
-      val request = FakeRequest(POST, "/")
-        .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj(
-          "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "", "quantity" -> 2))
-        ))
-      val result = controller.create("user@example.com").apply(request)
-
-      status(result) shouldBe BAD_REQUEST
-    }
-
     "return 400 when item quantity is zero" in {
       val (controller, _) = createFixture()
 
@@ -151,7 +169,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 0))
+          "items" -> Json.arr(validItemJson(quantity = 0))
         ))
       val result = controller.create("user@example.com").apply(request)
 
@@ -165,7 +183,63 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> -1))
+          "items" -> Json.arr(validItemJson(quantity = -1))
+        ))
+      val result = controller.create("user@example.com").apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is missing" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("quantity" -> 1, "unit_amount_minor" -> 100))
+        ))
+      val result = controller.create("user@example.com").apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when unit_amount_minor is missing" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(Json.obj("quantity" -> 1, "currency_code" -> "GBP"))
+        ))
+      val result = controller.create("user@example.com").apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is not exactly 3 characters" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(validItemJson(currencyCode = "GB"))
+        ))
+      val result = controller.create("user@example.com").apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when unit_amount_minor is negative" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj(
+          "name" -> "Groceries",
+          "items" -> Json.arr(validItemJson(unitAmountMinor = -1))
         ))
       val result = controller.create("user@example.com").apply(request)
 
@@ -179,7 +253,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "a" * 21,
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))
+          "items" -> Json.arr(validItemJson())
         ))
       val result = controller.create("user@example.com").apply(request)
 
@@ -189,7 +263,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
     "return 400 when items list exceeds 50 items" in {
       val (controller, _) = createFixture()
 
-      val items = (1 to 51).map(i => Json.obj("name" -> s"Item $i", "quantity" -> 1))
+      val items = (1 to 51).map(_ => validItemJson())
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
         .withBody(Json.obj(
@@ -228,7 +302,9 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
 
     "return 200 with multiple shopping lists" in {
       val (controller, mockService) = createFixture()
-      val secondList = ShoppingListWithItems("user@example.com", "Hardware", List(ShoppingListItem("Nails", 20)))
+      val secondList = ShoppingListWithItems("user@example.com", "Hardware", List(
+        ShoppingListItem(quantity = 20, currencyCode = "GBP", unitAmountMinor = 50L, lineAmountMinor = 1000L)
+      ))
       when(mockService.getShoppingLists("user@example.com"))
         .thenReturn(Future.successful(Right(List(testList, secondList))))
 

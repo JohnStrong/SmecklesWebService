@@ -11,10 +11,12 @@ import scala.concurrent.{ExecutionContext, Future}
 
 case class DecoupledShoppingList(id: Long, email: String, name: String)
 case class DecoupledShoppingListItem(
-  id: Long, // item id
-  shoppingListId: Long, // id of the shopping list this item belongs to
-  name: String, // the item name
-  quantity: Int // amount of the item
+  id: Long,
+  shoppingListId: Long,
+  quantity: Int,
+  currencyCode: String,
+  unitAmountMinor: Long,
+  lineAmountMinor: Long
 )
 
 object DecoupledShoppingList {
@@ -22,7 +24,12 @@ object DecoupledShoppingList {
     ShoppingListWithItems(
       email = shoppingList.email,
       name = shoppingList.name,
-      items = items.map(i => ShoppingListItem(name = i.name, quantity = i.quantity)).toList
+      items = items.map(i => ShoppingListItem(
+        quantity = i.quantity,
+        currencyCode = i.currencyCode,
+        unitAmountMinor = i.unitAmountMinor,
+        lineAmountMinor = i.lineAmountMinor
+      )).toList
     )
 }
 
@@ -34,10 +41,8 @@ class SlickShoppingListRepository @Inject()(
 
   import profile.api.*
 
-  // 1:1 with customer for now
-  // Implementation note: Slick works weird with case classes, so always define class for Table constructs
   private class ShoppingListsTable(tag: Tag) extends Table[DecoupledShoppingList](tag, "shopping_lists") {
-    def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // Note. use slick 'returning' during insert to get the id back
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def email = column[String]("email")
     def name = column[String]("name")
 
@@ -45,14 +50,15 @@ class SlickShoppingListRepository @Inject()(
   }
   private val shoppingLists = TableQuery[ShoppingListsTable]
 
-  // TODO: Implement https://github.com/JohnStrong/ShoppingListWebService/issues/2
   private class ShoppingListItemsTable(tag: Tag) extends Table[DecoupledShoppingListItem](tag, "shopping_list_items") {
-    def id = column[Long]("id", O.PrimaryKey, O.AutoInc) // Note. use slick 'returning' during insert to get the id back
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def shoppingListId = column[Long]("shopping_list_id")
-    def name = column[String]("name")
     def quantity = column[Int]("quantity")
+    def currencyCode = column[String]("currency_code")
+    def unitAmountMinor = column[Long]("unit_amount_minor")
+    def lineAmountMinor = column[Long]("line_amount_minor")
 
-    def * = (id, shoppingListId, name, quantity) <> (DecoupledShoppingListItem.apply, DecoupledShoppingListItem.unapply)
+    def * = (id, shoppingListId, quantity, currencyCode, unitAmountMinor, lineAmountMinor) <> (DecoupledShoppingListItem.apply, DecoupledShoppingListItem.unapply)
 
     def shoppingListFK = foreignKey("fk_list", shoppingListId, shoppingLists)(_.id, onDelete = ForeignKeyAction.Cascade)
   }
@@ -61,7 +67,7 @@ class SlickShoppingListRepository @Inject()(
   override def create(payload: ShoppingListWithItems): Future[Either[String, ShoppingListWithItems]] = {
     val action = (for {
       existing <- emailAndNameFilter(payload.email, payload.name)
-        .forUpdate  // lock this row (or the gap where it would be) until this transaction commits... (ensure no duplicate entries)
+        .forUpdate
         .result
         .headOption
       result <- existing match {
@@ -70,12 +76,10 @@ class SlickShoppingListRepository @Inject()(
           for {
             listId <- insertShoppingList(payload.email, payload.name)
             _ <- insertShoppingListItems(listId, payload.items)
-            // yield transforms to .map so... DBIO[A,B].map { a:A => Right(b:B) }
           } yield Right(payload)
       }
     } yield result).transactionally
 
-    // THIS kicks off the db transaction 'action' above described by the for-comprehension monadically
     db.run(action)
   }
 
@@ -83,7 +87,7 @@ class SlickShoppingListRepository @Inject()(
     val action = (for {
       shoppingList <- emailFilter(email).result.headOption
       result <- shoppingList match {
-        case Some (list) => for {
+        case Some(list) => for {
           items <- findItemsByIdentifier(list.id)
         } yield Right(DecoupledShoppingList.toShoppingListWithItems(list, items))
         case None => DBIO.successful(Left(s"No shopping list found for email $email."))
@@ -125,19 +129,17 @@ class SlickShoppingListRepository @Inject()(
 
   private def findItemsByIdentifier(id: Long) = shoppingListItems.filter(_.shoppingListId === id).result
 
-  // effectively: INSERT INTO shopping_lists (email, name) VALUES ('user@example.com', 'Groceries') RETURNING id;
   private def insertShoppingList(email: String, name: String) =
     (shoppingLists.map(sl => (sl.email, sl.name)) returning shoppingLists.map(_.id)) += (email, name)
 
-  /*
-  effectively:
-    INSERT INTO shopping_list_items (shopping_list_id, name, quantity)
-    VALUES
-      (42, 'Milk', 2),
-      (42, 'Bread', 1),
-      ...;
-   */
   private def insertShoppingListItems(shoppingListId: Long, items: List[ShoppingListItem]) = {
-    shoppingListItems ++= items.map(i => DecoupledShoppingListItem(0L, shoppingListId, i.name, i.quantity))
+    shoppingListItems ++= items.map(i => DecoupledShoppingListItem(
+      0L,
+      shoppingListId,
+      i.quantity,
+      i.currencyCode,
+      i.unitAmountMinor,
+      i.lineAmountMinor
+    ))
   }
 }

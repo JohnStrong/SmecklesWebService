@@ -146,7 +146,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj(
           "name" -> "Groceries",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2))
+          "items" -> Json.arr(Json.obj("quantity" -> 2, "currency_code" -> "GBP", "unit_amount_minor" -> 129))
         ))
       status(route(app, createList).get) mustBe CREATED
 

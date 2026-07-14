@@ -12,7 +12,10 @@ import scala.concurrent.Future
 
 class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures {
 
-  private val testItems = List(ShoppingListItem("Milk", 2), ShoppingListItem("Bread", 1))
+  private val testItems = List(
+    ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
+    ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
+  )
   private val testList = ShoppingListWithItems("user@example.com", "Groceries", testItems)
 
   private def freshService() = {

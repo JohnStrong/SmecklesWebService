@@ -8,18 +8,19 @@ A personal budgeting companion that grows with you — from simple shopping list
 - [Tech Stack](#tech-stack)
   - [Why Apache Pekko over Akka?](#why-apache-pekko-over-akka)
   - [Key Features of the Stack](#key-features-of-the-stack)
-- [Project Structure](#project-structure)
 - [Service Flow](#service-flow)
 - [How To Run](#how-to-run)
 - [How To Deploy](#how-to-deploy)
 - [Authentication](#authentication)
   - [How It Works](#how-it-works)
+  - [Email Allowlist](#email-allowlist)
   - [Getting a Bearer Token](#getting-a-bearer-token)
 - [Data Model](#data-model)
 - [API](#api)
   - [Health Check](#health-check)
   - [Create Customer](#create-customer)
   - [Get Customer by Email](#get-customer-by-email)
+  - [Delete Customer](#delete-customer)
   - [Create Shopping List](#create-shopping-list)
   - [Get Shopping Lists](#get-shopping-lists)
   - [Delete Shopping List](#delete-shopping-list)
@@ -67,64 +68,6 @@ Akka changed to a Business Source License (BSL) in 2022, making it non-free for 
 - **Reactive streams** — Pekko Streams handles async data pipelines with built-in backpressure between frontend and backend
 - **Type safety** — Scala 3's type system catches errors at compile time; case classes and sealed traits model the domain precisely
 - **Non-blocking I/O** — Play and Pekko are async-first, handling many concurrent connections on few threads
-
-## Project Structure
-
-```
-app/
-├── controllers/
-│   ├── CustomerController.scala                # Customer REST endpoints
-│   └── ShoppingListController.scala            # Shopping list REST endpoints
-├── models/
-│   ├── Customer.scala                          # Customer case class + JSON format
-│   ├── ShoppingList.scala                      # ShoppingListWithItems domain model
-│   ├── ShoppingListItem.scala                  # ShoppingListItem + DecoupledShoppingListItem
-│   └── requests/
-│       └── ShoppingListCreateRequest.scala     # Create shopping list request DTO
-├── repositories/
-│   ├── DataRepository.scala                    # Base trait: async CRUD contract
-│   ├── SlickDataRepository.scala               # Base Slick repository (play-slick)
-│   ├── InMemoryDataRepository.scala            # In-memory HashMap-backed trait
-│   ├── customer/
-│   │   ├── CustomerRepository.scala            # Concrete in-memory customer repo
-│   │   └── SlickCustomerRepository.scala       # Slick/H2/PostgreSQL customer repo
-│   └── shoppinglist/
-│       ├── ShoppingListRepository.scala        # Concrete in-memory shopping list repo
-│       └── SlickShoppingListRepository.scala   # Slick/H2/PostgreSQL shopping list repo
-├── services/
-│   ├── Customer.scala                          # Customer service trait + impl
-│   └── ShoppingList.scala                      # Shopping list service trait + impl
-└── Module.scala                                # Guice DI bindings
-conf/
-├── application.conf                            # Base config: named H2 (local dev + functional tests)
-├── test.conf                                   # Unit test overrides: anonymous H2 (isolated per test)
-├── evolutions/
-│   └── default/
-│       └── 1.sql                               # Initial schema (customers, lists, items)
-├── routes                                      # URL routing
-└── logback.xml                                 # Logging
-test/
-├── controllers/
-│   ├── CustomerControllerSpec.scala
-│   └── ShoppingListControllerSpec.scala
-├── models/
-│   ├── CustomerModelSpec.scala
-│   └── ShoppingListItemModelSpec.scala
-├── repositories/
-│   ├── customer/
-│   │   ├── CustomerRepositorySpec.scala
-│   │   └── SlickCustomerRepositorySpec.scala
-│   └── shoppinglist/
-│       ├── ShoppingListRepositorySpec.scala
-│       └── SlickShoppingListRepositorySpec.scala
-└── services/
-    ├── CustomerServiceImplSpec.scala
-    └── ShoppingListServiceImplSpec.scala
-functional-tests/
-└── api/
-    ├── CustomerServiceFunctionalTest.scala     # Customer API end-to-end tests
-    └── ShoppingListFunctionalTest.scala        # Shopping list API end-to-end tests
-```
 
 ## Service Flow
 
@@ -276,13 +219,13 @@ curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@exam
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
-# → 201
+  -d '{"name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
+# → 201 {"email":"hello@example.com","name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}
 
 # 7. Get shopping lists
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
-# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[...]}]
+# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}]
 
 # 8. Delete shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
@@ -383,7 +326,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/customers/me
 
 ```
 users 1──────┐
-             │ owns (planned FK: customers.user_id)
+             │ owns (FK: customers.user_id → users.id)
              ▼
 customers 1──────┐
                  │ FK: shopping_lists.email → customers.email
@@ -396,7 +339,7 @@ shopping_lists 1──────┐
 
 ### Tables
 
-#### `users` (planned)
+#### `users`
 
 The authenticated Google account. Created automatically on first authenticated request if the email is not already present.
 
@@ -407,12 +350,12 @@ The authenticated Google account. Created automatically on first authenticated r
 
 #### `customers`
 
-A person managed within the app (e.g. a family member, a flatmate). Currently the top-level entity; will gain a `user_id` FK to `users` once the users table is implemented.
+A person managed within the app (e.g. a family member, a flatmate). Scoped to an authenticated user via `user_id`.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `email` | VARCHAR(320) | PK | Customer identifier |
-| `user_id` | BIGINT | FK → `users.id` (planned) | The authenticated user who manages this customer |
+| `user_id` | BIGINT | NOT NULL, FK → `users.id` ON DELETE CASCADE | The authenticated user who manages this customer |
 
 #### `shopping_lists`
 
@@ -421,26 +364,23 @@ A named shopping list belonging to a customer.
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `id` | BIGINT | PK, auto-increment | Generated |
-| `email` | VARCHAR(320) | NOT NULL, UNIQUE, FK → `customers.email` | Owner customer |
+| `email` | VARCHAR(320) | NOT NULL, FK → `customers.email` ON DELETE CASCADE | Owner customer |
 | `name` | VARCHAR(30) | NOT NULL | List display name |
+
+Composite unique constraint: `UNIQUE(email, name)` — a customer can have multiple lists, but each must have a distinct name.
 
 #### `shopping_list_items`
 
-An item within a shopping list.
+An item within a shopping list. Monetary amounts are stored in minor currency units (e.g. pence, cents). `line_amount_minor` is computed server-side as `quantity × unit_amount_minor`.
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `id` | BIGINT | PK, auto-increment | Generated |
-| `shopping_list_id` | BIGINT | NOT NULL, FK → `shopping_lists.id` | Parent list |
-| `name` | VARCHAR(30) | NOT NULL | Item name |
+| `shopping_list_id` | BIGINT | NOT NULL, FK → `shopping_lists.id` ON DELETE CASCADE | Parent list |
 | `quantity` | INT | NOT NULL | Must be ≥ 1 |
-
-### Planned Changes
-
-- Add `users` table with auto-increment `id`, unique `email`
-- Add `user_id` FK column to `customers` — scopes customers to the signed-in user
-- Lookup/create user on each authenticated request using the JWT `email` claim
-- A user can manage multiple customers; each customer belongs to exactly one user
+| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code (e.g. GBP, USD, EUR) |
+| `unit_amount_minor` | BIGINT | NOT NULL | Price per unit in minor currency units (e.g. £1.29 → 129) |
+| `line_amount_minor` | BIGINT | NOT NULL | Line total: `quantity × unit_amount_minor` |
 
 ## API
 
@@ -510,8 +450,8 @@ Content-Type: application/json
 {
   "name": "Weekly Groceries",
   "items": [
-    {"name": "Milk", "quantity": 2},
-    {"name": "Bread", "quantity": 1}
+    {"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129},
+    {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100}
   ]
 }
 ```
@@ -519,12 +459,15 @@ Content-Type: application/json
 Validation rules:
 - `name` — required, cannot be empty
 - `items` — required, must contain at least one item
-- Each item `name` — required, cannot be empty
 - Each item `quantity` — required, must be at least 1
+- Each item `currency_code` — required, must be exactly 3 characters (ISO 4217)
+- Each item `unit_amount_minor` — required, must be ≥ 0 (price per unit in minor currency units)
+
+`line_amount_minor` is computed server-side as `quantity × unit_amount_minor` and returned in responses.
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}` |
+| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
@@ -538,7 +481,7 @@ GET /api/v1/customers/:email/shopping-lists
 
 | Status | Response |
 |--------|----------|
-| 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"name": "Milk", "quantity": 2}, {"name": "Bread", "quantity": 1}]}]` |
+| 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}]` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
@@ -575,7 +518,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","items":[{"name":"Milk","quantity":2},{"name":"Bread","quantity":1}]}'
+  -d '{"name":"Weekly Groceries","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
 
 # Get all shopping lists for a customer
 curl -H "Authorization: Bearer $TOKEN" \

@@ -20,12 +20,15 @@ CREATE TABLE shopping_lists (
 );
 
 CREATE TABLE shopping_list_items (
-     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-     shopping_list_id BIGINT NOT NULL,
-     name VARCHAR(30) NOT NULL,
-     quantity INT NOT NULL,
+     id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+     shopping_list_id       BIGINT NOT NULL,
+     quantity               INT NOT NULL,
+     currency_code          CHAR(3) NOT NULL CHECK (char_length(currency_code)=3), -- ISO 4217
+     unit_amount_minor      BIGINT NOT NULL,        -- minor units (pence/cents/etc.) e.g. 12.34$ -> 1234
+     line_amount_minor      BIGINT NOT NULL,        -- quantity * unit_amount_minor
      FOREIGN KEY (shopping_list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
 );
+CREATE INDEX shopping_list_items__by_list ON shopping_list_items (shopping_list_id);
 
 -- !Downs
 DROP TABLE shopping_list_items;
