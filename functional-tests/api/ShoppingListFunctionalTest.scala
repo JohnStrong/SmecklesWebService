@@ -8,8 +8,8 @@ import play.api.test.Helpers.*
 class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTest {
 
   // Helper to create a valid item JSON
-  private def validItemJson(quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
-    Json.obj("quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
+  private def validItemJson(name: String = "Milk", quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
+    Json.obj("name" -> name, "quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
 
   // Helper to create a valid create request body
   private def validCreateBody(
@@ -76,8 +76,8 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
           periodStart = "2026-07-01",
           dayDate = "2026-07-05",
           items = Json.arr(
-            validItemJson(quantity = 2, unitAmountMinor = 129L),
-            validItemJson(quantity = 1, unitAmountMinor = 100L)
+            validItemJson(name = "Milk", quantity = 2, unitAmountMinor = 129L),
+            validItemJson(name = "Bread", quantity = 1, unitAmountMinor = 100L)
           )
         ))
       val createResult = route(app, createList).get

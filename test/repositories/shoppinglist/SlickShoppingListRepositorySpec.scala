@@ -33,8 +33,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     periodStart = LocalDate.of(2026, 7, 1),
     dayDate = LocalDate.of(2026, 7, 5),
     items = List(
-      ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
-      ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
+      ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
+      ShoppingListItem(name = "Bread", quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
     ))
 
   private def withCustomer(test: Long => Any): Unit = {
@@ -97,7 +97,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       repository.create(shoppingList).futureValue
 
       val duplicate = shoppingList.copy(items = List(
-        ShoppingListItem(quantity = 6, currencyCode = "GBP", unitAmountMinor = 50L, lineAmountMinor = 300L)
+        ShoppingListItem(name = "Eggs", quantity = 6, currencyCode = "GBP", unitAmountMinor = 50L, lineAmountMinor = 300L)
       ))
       val result = repository.create(duplicate).futureValue
 

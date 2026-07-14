@@ -30,14 +30,14 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
     periodStart = LocalDate.of(2026, 7, 1),
     dayDate = LocalDate.of(2026, 7, 5),
     items = List(
-      ShoppingListItem(quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
-      ShoppingListItem(quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
+      ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
+      ShoppingListItem(name = "Bread", quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
     )
   )
 
   // Helper to create a valid item JSON
-  private def validItemJson(quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
-    Json.obj("quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
+  private def validItemJson(name: String = "Milk", quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
+    Json.obj("name" -> name, "quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
 
   // Helper to create a valid create request body
   private def validCreateBody(
@@ -101,8 +101,8 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         periodStart = LocalDate.of(2026, 7, 1),
         dayDate = LocalDate.of(2026, 7, 5),
         items = List(
-          ShoppingListItem(quantity = 3, currencyCode = "GBP", unitAmountMinor = 200L, lineAmountMinor = 600L),
-          ShoppingListItem(quantity = 5, currencyCode = "USD", unitAmountMinor = 150L, lineAmountMinor = 750L)
+          ShoppingListItem(name = "Rice", quantity = 3, currencyCode = "GBP", unitAmountMinor = 200L, lineAmountMinor = 600L),
+          ShoppingListItem(name = "Pasta", quantity = 5, currencyCode = "USD", unitAmountMinor = 150L, lineAmountMinor = 750L)
         )
       )
       when(mockService.create(any[ShoppingListWithItems]())).thenReturn(Future.successful(Right(listWithComputedLineAmounts)))

@@ -380,10 +380,14 @@ An item within a shopping list. Monetary amounts are stored in minor currency un
 |--------|------|-------------|-------|
 | `id` | BIGINT | PK, auto-increment | Generated |
 | `shopping_list_id` | BIGINT | NOT NULL, FK → `shopping_lists.id` ON DELETE CASCADE | Parent list |
+| `name` | VARCHAR(100) | NOT NULL | Human-readable item label (e.g. "Milk", "Bread") |
 | `quantity` | INT | NOT NULL | Must be ≥ 1 |
 | `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code (e.g. GBP, USD, EUR) |
 | `unit_amount_minor` | BIGINT | NOT NULL | Price per unit in minor currency units (e.g. £1.29 → 129) |
 | `line_amount_minor` | BIGINT | NOT NULL | Line total: `quantity × unit_amount_minor` |
+| `status` | VARCHAR(20) | NOT NULL, DEFAULT 'pending' | Item completion status: `pending` or `completed` |
+
+Composite unique constraint: `UNIQUE(shopping_list_id, name)` — an item name cannot appear twice within the same list.
 
 ## API
 
