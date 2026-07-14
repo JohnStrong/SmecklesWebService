@@ -24,6 +24,7 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Create Shopping List](#create-shopping-list)
   - [Get Shopping Lists](#get-shopping-lists)
   - [Delete Shopping List](#delete-shopping-list)
+  - [Update Item Status](#update-item-status-planned)
   - [Examples](#examples)
 - [Database Configuration](#database-configuration)
   - [Per-Environment Configuration](#per-environment-configuration)
@@ -506,6 +507,28 @@ Deletes a shopping list by its composite key (email + name). The operation is id
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
+
+### Update Item Status (PLANNED)
+
+```
+PATCH /api/v1/customers/:email/shopping-lists/:name/items/:id
+Content-Type: application/json
+
+{"status": "completed"}
+```
+
+Marks a shopping list item as completed or reverts it to pending. When an item is marked `completed`, an expense record is created in the same transaction. When reverted to `pending`, the corresponding expense is deleted.
+
+Valid status values: `pending`, `completed`.
+
+| Status | Response |
+|--------|----------|
+| 200 | `{"id": 1, "quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258, "status": "completed"}` |
+| 400 | `{"error": "Invalid status value"}` — status is not `pending` or `completed` |
+| 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
+| 404 | `{"error": "Item not found"}` — item ID does not exist within this shopping list |
+| 409 | `{"error": "Item is already completed"}` — item already has the requested status |
 
 ### Examples
 
