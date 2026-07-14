@@ -289,7 +289,12 @@ The wants/needs classification can be derived ephemerally in the UX layer by map
 
 1. **Expenses are write-once** — marking an item complete creates an expense; unchecking deletes it (or marks it `cancelled`). This keeps the ledger accurate.
 
-2. **Single currency per budget** — a customer's monthly budget has one currency. Multi-currency support would require exchange rates (deferred).
+2. **Single currency per budget (hard requirement)** — a customer's monthly budget has one currency. **All expenses and shopping list items for that customer and period MUST use the same currency as the budget.** The service layer enforces this: before persisting any expense or shopping list item, look up `customer_budgets` by `(email, period_start)` and reject the request if `currency_code` does not match. This is non-negotiable — without it, remaining budget calculations are meaningless. Multi-currency support would require exchange rates (deferred).
+
+   **Enforcement point:** Service layer (not DB constraint, because it spans tables). Error response:
+   ```json
+   {"error": "Currency mismatch: item uses USD but customer budget for 2026-07-01 is GBP"}
+   ```
 
 3. **No pre-aggregation** — remaining is always computed live. For most users the number of monthly expenses is small enough (< 1000) that this is fast. If performance becomes an issue, a materialised view or cache can be added later.
 
