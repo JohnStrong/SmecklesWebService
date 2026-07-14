@@ -583,7 +583,7 @@ Deletes a shopping list by its composite key (email + name). The operation is id
 ### Update Item Status (PLANNED)
 
 ```
-PATCH /api/v1/customers/:email/shopping-lists/:name/items/:id
+PATCH /api/v1/customers/:email/shopping-lists/:name/items/:item_name
 Content-Type: application/json
 
 {"status": "completed"}
@@ -591,15 +591,17 @@ Content-Type: application/json
 
 Marks a shopping list item as completed or reverts it to pending. When an item is marked `completed`, an expense record is created in the same transaction. When reverted to `pending`, the corresponding expense is deleted.
 
+Items are addressed by name, which is unique within a list (`UNIQUE(shopping_list_id, name)`).
+
 Valid status values: `pending`, `completed`.
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"id": 1, "quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258, "status": "completed"}` |
+| 200 | `{"name": "Milk", "quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258, "status": "completed"}` |
 | 400 | `{"error": "Invalid status value"}` — status is not `pending` or `completed` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
-| 404 | `{"error": "Item not found"}` — item ID does not exist within this shopping list |
+| 404 | `{"error": "Item not found"}` — item name does not exist within this shopping list |
 | 409 | `{"error": "Item is already completed"}` — item already has the requested status |
 
 ### Examples
