@@ -223,25 +223,39 @@ curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@exam
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
-# → 201 {"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}
+  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
+# → 201 {"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}
 
 # 7. Get shopping lists
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
-# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100}]}]
+# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}]
 
-# 8. Delete shopping list
+# 8. Mark item as completed
+curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"completed"}'
+# → 200 {"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"completed"}
+
+# 9. Revert item back to pending
+curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"pending"}'
+# → 200 {"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"}
+
+# 10. Delete shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries"
 # → 204 No Content
 
-# 9. Delete customer
+# 11. Delete customer
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 204 No Content
 
-# 10. Confirm customer is gone
+# 12. Confirm customer is gone
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 404 {"error":"Customer with email 'hello@example.com' not found."}
@@ -622,11 +636,23 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
+  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
 
 # Get all shopping lists for a customer
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists
+
+# Mark an item as completed
+curl -X PATCH http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"completed"}'
+
+# Revert an item back to pending
+curl -X PATCH http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"pending"}'
 
 # Delete a shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
