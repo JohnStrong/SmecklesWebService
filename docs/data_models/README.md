@@ -355,7 +355,7 @@ CREATE TABLE one_off_payments (
 
 ### Computing Remaining Budget
 
-The remaining budget for a customer in a given period is a derived value:
+The remaining budget is derived by subtracting all expenses within the budget's date range:
 
 ```sql
 SELECT
@@ -373,7 +373,32 @@ WHERE b.email = 'shopper@example.com'
 GROUP BY b.amount_minor, b.currency_code, b.period_start, b.period_end;
 ```
 
-Expenses are matched by `day_date` falling within the budget's `[period_start, period_end)` range (start-inclusive, end-exclusive). This works for any period length — weekly, monthly, or custom.
+### Querying Expenses Over a Date Range
+
+A single query pattern serves all use cases — today's expenses, the whole budget period, or any historical range:
+
+```sql
+SELECT
+    e.description,
+    e.category,
+    e.amount_minor,
+    e.currency_code,
+    e.day_date,
+    e.source_type
+FROM expenses e
+WHERE e.email = 'shopper@example.com'
+  AND e.day_date >= :start_date
+  AND e.day_date < :end_date;
+```
+
+| Use case | start_date | end_date |
+|----------|-----------|----------|
+| Today only | `2026-07-14` | `2026-07-15` |
+| Whole budget month | `2026-07-01` | `2026-08-01` |
+| This week | `2026-07-08` | `2026-07-15` |
+| Two weeks ago to one week ago | `2026-06-30` | `2026-07-07` |
+
+Useful for daily notifications like: *"£42.30 spent today (3 items). £1,457.70 remaining this month."*
 
 This approach:
 - **No stored `remaining`** — avoids drift between expense totals and the cached value
