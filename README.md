@@ -27,7 +27,7 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Create Shopping List](#create-shopping-list)
   - [Get Shopping Lists](#get-shopping-lists)
   - [Delete Shopping List](#delete-shopping-list)
-  - [Update Item Status](#update-item-status-planned)
+  - [Update Item Status](#update-item-status)
   - [Examples](#examples)
 - [Database Configuration](#database-configuration)
   - [Per-Environment Configuration](#per-environment-configuration)
@@ -594,7 +594,7 @@ Deletes a shopping list by its composite key (email + name). The operation is id
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
 
-### Update Item Status (PLANNED)
+### Update Item Status
 
 ```
 PATCH /api/v1/customers/:email/shopping-lists/:name/items/:item_name
