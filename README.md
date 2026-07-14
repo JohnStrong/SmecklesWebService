@@ -375,6 +375,21 @@ A person managed within the app (e.g. a family member, a flatmate). Scoped to an
 | `email` | VARCHAR(320) | PK | Customer identifier |
 | `user_id` | BIGINT | NOT NULL, FK → `users.id` ON DELETE CASCADE | The authenticated user who manages this customer |
 
+#### `customer_budgets`
+
+The spending budget for a customer over a defined period. Supports any period length (weekly, fortnightly, monthly, custom).
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | BIGINT | PK, auto-increment | Generated |
+| `email` | VARCHAR(320) | NOT NULL, FK → `customers.email` ON DELETE CASCADE | Owner customer |
+| `period_start` | DATE | NOT NULL | Start of budget window (e.g. 2026-07-01) |
+| `period_end` | DATE | NOT NULL | End of budget window, exclusive (e.g. 2026-08-01) |
+| `amount_minor` | BIGINT | NOT NULL | Total budget in minor currency units (e.g. £2,000 → 200000) |
+| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code (e.g. GBP, USD, EUR) |
+
+Composite unique constraint: `UNIQUE(email, period_start)` — one budget per customer per period start date. Budget periods for the same customer must not overlap (enforced at service layer).
+
 #### `shopping_lists`
 
 A named shopping list belonging to a customer, assigned to a specific day within a month.
