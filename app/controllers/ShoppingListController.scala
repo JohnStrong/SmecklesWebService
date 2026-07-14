@@ -53,6 +53,10 @@ class ShoppingListController @Inject()(
     }
   }
 
+  def updateItemStatus(email: String, name: String, itemName: String): Action[AnyContent] = authenticated.async { _ =>
+    Future.successful(NotImplemented(Json.obj("error" -> "Update item status is not yet implemented")))
+  }
+
   private def createShoppingListFromReq(email: String, request: ShoppingListCreateRequest): ShoppingListWithItems = {
     ShoppingListWithItems(
       email = email,
