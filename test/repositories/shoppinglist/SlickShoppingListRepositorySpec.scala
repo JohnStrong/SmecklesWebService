@@ -188,6 +188,23 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
 
       result.value shouldBe (())
     }
+
+    "only delete the list on a specific day when same name exists on multiple days" in withCustomer {
+      val july5 = shoppingList.copy(name = "Weekly Groceries", dayDate = LocalDate.of(2026, 7, 5))
+      val july12 = shoppingList.copy(name = "Weekly Groceries", dayDate = LocalDate.of(2026, 7, 12))
+
+      repository.create(july5).futureValue
+      repository.create(july12).futureValue
+
+      repository.deleteByEmailNameAndDay(
+        shoppingList.email,
+        "Weekly Groceries",
+        LocalDate.of(2026, 7, 5)
+      ).futureValue
+
+      val remaining = repository.findAllByEmail(shoppingList.email).futureValue
+      remaining.value should have length 1  // Expect one to remain — this will FAIL with current impl
+    }
   }
 
   "updateItemStatus" should {

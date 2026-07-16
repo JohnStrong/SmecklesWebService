@@ -157,6 +157,37 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       contentAsJson(getLists).as[List[JsObject]].length mustBe 2
     }
 
+    "delete only one list when same name exists on different days" in {
+      val createCustomer = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "delete-day@test.com"))
+      status(route(app, createCustomer).get) mustBe CREATED
+
+      // Create same list name on two different days
+      val july5 = validCreateBody(name = "Weekly Groceries", dayDate = "2026-07-05")
+      val july12 = validCreateBody(name = "Weekly Groceries", dayDate = "2026-07-12")
+
+      status(route(app, FakeRequest(POST, "/api/v1/customers/delete-day@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(july5)).get) mustBe CREATED
+
+      status(route(app, FakeRequest(POST, "/api/v1/customers/delete-day@test.com/shopping-lists")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(july12)).get) mustBe CREATED
+
+      // Delete the July 5 list only (dayDate in path)
+      val deleteResult = route(app, FakeRequest(DELETE, "/api/v1/customers/delete-day@test.com/shopping-lists/2026-07-05/Weekly%20Groceries")
+        .withHeaders(authHeader())).get
+      status(deleteResult) mustBe NO_CONTENT
+
+      // July 12 list should still exist
+      val remaining = route(app, FakeRequest(GET, "/api/v1/customers/delete-day@test.com/shopping-lists")
+        .withHeaders(authHeader())).get
+      val lists = contentAsJson(remaining).as[List[JsObject]]
+      lists.length mustBe 1
+      (lists.head \ "day_date").as[String] mustBe "2026-07-12"
+    }
+
     "allow creating two shopping lists with different names on the same day" in {
       val createCustomer = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")

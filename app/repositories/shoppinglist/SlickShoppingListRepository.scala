@@ -141,6 +141,16 @@ class SlickShoppingListRepository @Inject()(
     }
   }
 
+  override def deleteByEmailNameAndDay(email: String, name: String, dayDate: LocalDate): Future[Either[String, Unit]] = {
+    val action = shoppingLists
+      .filter(sl => sl.email === email && sl.name === name && sl.dayDate === dayDate)
+      .delete
+      .map(_ => Right(()))
+    db.run(action).recover {
+      case ex => Left(s"Failed to delete shopping list '$name' on day '${dayDate}': ${ex.getMessage}")
+    }
+  }
+
   override def updateItemStatus(email: String, listName: String, itemName: String, status: String): Future[Either[String, ShoppingListItem]] = {
     val action = (for {
       // Find the shopping list by email and name
