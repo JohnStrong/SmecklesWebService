@@ -105,7 +105,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       (lists.head \ "items").as[List[JsObject]].head.apply("line_amount_minor").as[Long] mustBe 258L
 
       // Delete
-      val deleteResult = route(app, FakeRequest(DELETE, "/api/v1/customers/shopper@test.com/shopping-lists/Weekly%20Groceries")
+      val deleteResult = route(app, FakeRequest(DELETE, "/api/v1/customers/shopper@test.com/shopping-lists/2026-07-05/Weekly%20Groceries")
         .withHeaders(authHeader())).get
       status(deleteResult) mustBe NO_CONTENT
 

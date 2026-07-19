@@ -32,6 +32,10 @@ lazy val root = (project in file("."))
       "com.auth0" % "java-jwt" % "4.4.0",   // auth: JWT decode + verify
       "com.auth0" % "jwks-rsa" % "0.22.1"   // auth: Fetches Google's public signing keys
     ),
+
+    // http: Enable implicit mapping of pathVariable date strings (YYYY-MM-dd) to java.time.LocalDate (+ vice-versa)
+    routesImport += "binders.PathBinders._",
+
     // Functional test configuration - run with sbt functional:test
     inConfig(FunctionalTest)(Defaults.testSettings),
 
