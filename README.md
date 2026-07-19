@@ -247,7 +247,7 @@ curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/We
 
 # 10. Delete shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-  "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries"
+  "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/2026-07-05/Weekly%20Groceries"
 # → 204 No Content
 
 # 11. Delete customer
@@ -597,14 +597,19 @@ GET /api/v1/customers/:email/shopping-lists
 ### Delete Shopping List
 
 ```
-DELETE /api/v1/customers/:email/shopping-lists/:name
+DELETE /api/v1/customers/:email/shopping-lists/:dayDate/:name
 ```
 
-Deletes a shopping list by its composite key (email + name). The operation is idempotent — deleting a list that does not exist returns 204 (not an error).
+Deletes a shopping list for a specified day and name. The composite key `(email, day_date, name)` uniquely identifies the list — the same list name can exist on different days, so `day_date` is required to target the correct one.
+
+The operation is idempotent — deleting a list that does not exist returns 204 (not an error).
+
+`day_date` must be in `yyyy-MM-dd` format (e.g. `2026-07-05`).
 
 | Status | Response |
 |--------|----------|
 | 204 | No content — shopping list deleted (or did not exist) |
+| 400 | `{"error": "Invalid date format for 'dayDate': expected yyyy-MM-dd, got '...'"}` — malformed date |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
@@ -671,7 +676,7 @@ curl -X PATCH http://localhost:9000/api/v1/customers/hello@example.com/shopping-
 
 # Delete a shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-  http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries
+  http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/2026-07-05/Weekly%20Groceries
 ```
 
 ## Database Configuration
@@ -833,7 +838,7 @@ POST   /api/v1/customers/:email/shopping-lists             # create a list ✅
 GET    /api/v1/customers/:email/shopping-lists             # get all lists for customer ✅
 GET    /api/v1/customers/:email/shopping-lists/:name       # get one list by name
 PUT    /api/v1/customers/:email/shopping-lists/:name       # update a list
-DELETE /api/v1/customers/:email/shopping-lists/:name       # delete a list
+DELETE /api/v1/customers/:email/shopping-lists/:dayDate/:name  # delete a list ✅
 ```
 
 **Why this is better:**
