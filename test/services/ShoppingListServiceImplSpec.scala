@@ -111,6 +111,40 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
     }
   }
 
+  "delete by email, dayDate, and name" should {
+
+    "return Right(()) on successful deletion" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.deleteByEmailNameAndDay("user@example.com", "Groceries", LocalDate.of(2026, 7, 5)))
+        .thenReturn(Future.successful(Right(())))
+
+      val result = service.delete("user@example.com", LocalDate.of(2026, 7, 5), "Groceries").futureValue
+
+      result shouldBe Right(())
+    }
+
+    "return Right(()) when shopping list does not exist (idempotent)" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.deleteByEmailNameAndDay("user@example.com", "Nonexistent", LocalDate.of(2026, 7, 5)))
+        .thenReturn(Future.successful(Right(())))
+
+      val result = service.delete("user@example.com", LocalDate.of(2026, 7, 5), "Nonexistent").futureValue
+
+      result shouldBe Right(())
+    }
+
+    "return Left when repository returns an error" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.deleteByEmailNameAndDay("user@example.com", "Groceries", LocalDate.of(2026, 7, 5)))
+        .thenReturn(Future.successful(Left("Failed to delete shopping list 'Groceries' on day '2026-07-05': connection reset")))
+
+      val result = service.delete("user@example.com", LocalDate.of(2026, 7, 5), "Groceries").futureValue
+
+      result shouldBe a[Left[_, _]]
+      result.left.toOption.get should include("Failed to delete")
+    }
+  }
+
   "updateItemStatus" should {
 
     "return Right with updated item when status is valid" in {
