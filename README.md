@@ -21,6 +21,7 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Create Customer](#create-customer)
   - [Get Customer by Email](#get-customer-by-email)
   - [Delete Customer](#delete-customer)
+  - [Get Customer Budgets](#get-customer-budgets-planned)
   - [Create Customer Budget](#create-customer-budget-planned)
   - [Update Customer Budget](#update-customer-budget-planned)
   - [Delete Customer Budget](#delete-customer-budget-planned)
@@ -489,6 +490,20 @@ DELETE /api/v1/customers/:email
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Customer with email '...' not found."}` — customer does not exist |
+
+### Get Customer Budgets (PLANNED)
+
+```
+GET /api/v1/customers/:email/budgets
+```
+
+Returns all budgets for a customer.
+
+| Status | Response |
+|--------|----------|
+| 200 | `[{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 200000, "currency_code": "GBP"}]` |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
 
 ### Create Customer Budget (PLANNED)
 
