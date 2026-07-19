@@ -14,5 +14,14 @@ DELETE  /api/v1/customers/:email/shopping-lists/:dayDate/:name          controll
 # Update an item status (pending, complete)
 PATCH   /api/v1/customers/:email/shopping-lists/:name/items/:itemName   controllers.ShoppingListController.updateItemStatus(email: String, name: String, itemName: String)
 
+# Get customer budgets (all, or filtered by period)
+GET     /api/v1/customers/:email/budgets                                controllers.CustomerBudgetController.getBudgets(email: String)
+# Create a new customer budget
+POST    /api/v1/customers/:email/budgets                                controllers.CustomerBudgetController.create(email: String)
+# Update an existing budget (amount, currency)
+PUT     /api/v1/customers/:email/budgets/:periodStart                   controllers.CustomerBudgetController.update(email: String, periodStart: java.time.LocalDate)
+# Delete a budget
+DELETE  /api/v1/customers/:email/budgets/:periodStart                   controllers.CustomerBudgetController.delete(email: String, periodStart: java.time.LocalDate)
+
 # Health check
 GET     /api/v1/health   controllers.HealthController.check()
