@@ -250,15 +250,25 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/2026-07-05/Weekly%20Groceries"
 # → 204 No Content
 
-# 11. Delete customer
+# 11. Confirm shopping list is gone
+curl -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
+# → 200 []
+
+# 12. Delete customer
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 204 No Content
 
-# 12. Confirm customer is gone
+# 13. Confirm customer is gone
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 404 {"error":"Customer with email 'hello@example.com' not found."}
+
+# 14. Bad date format returns JSON error (PathBindable + JsonErrorHandler)
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/not-a-date/Groceries"
+# → 400 {"error":"Invalid date format for 'dayDate': expected yyyy-MM-dd, got 'not-a-date'"}
 ```
 
 ## Authentication
