@@ -359,40 +359,6 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
     }
   }
 
-  "delete" should {
-
-    "return 204 when shopping list is successfully deleted" in {
-      val (controller, mockService) = createFixture()
-      when(mockService.delete("user@example.com", "Groceries"))
-        .thenReturn(Future.successful(Right(())))
-
-      val result = controller.delete("user@example.com", "Groceries").apply(FakeRequest())
-
-      status(result) shouldBe NO_CONTENT
-    }
-
-    "return 204 when shopping list does not exist (idempotent)" in {
-      val (controller, mockService) = createFixture()
-      when(mockService.delete("user@example.com", "Nonexistent"))
-        .thenReturn(Future.successful(Right(())))
-
-      val result = controller.delete("user@example.com", "Nonexistent").apply(FakeRequest())
-
-      status(result) shouldBe NO_CONTENT
-    }
-
-    "return 500 when service returns an error" in {
-      val (controller, mockService) = createFixture()
-      when(mockService.delete("user@example.com", "Groceries"))
-        .thenReturn(Future.successful(Left("Failed to delete shopping list 'Groceries' for customer user@example.com: connection reset")))
-
-      val result = controller.delete("user@example.com", "Groceries").apply(FakeRequest())
-
-      status(result) shouldBe INTERNAL_SERVER_ERROR
-      (contentAsJson(result) \ "error").as[String] should include("Failed to delete")
-    }
-  }
-
   "deleteV2" should {
 
     "return 204 when shopping list is successfully deleted by email, dayDate, and name" in {

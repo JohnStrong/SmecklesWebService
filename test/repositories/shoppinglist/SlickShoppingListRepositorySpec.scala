@@ -154,37 +154,46 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     }
   }
 
-  "deleteByEmailAndName" should {
-    "delete the shopping list when both email and name match" in withCustomer {
+  "deleteByEmailNameAndDay" should {
+    "delete the shopping list when email, day, and name all match" in withCustomer {
       repository.create(shoppingList).futureValue
 
-      val result = repository.deleteByEmailAndName(shoppingList.email, shoppingList.name).futureValue
+      val result = repository.deleteByEmailNameAndDay(shoppingList.email, shoppingList.name, shoppingList.dayDate).futureValue
       result.value shouldBe (())
 
       val stored = repository.findAllByEmail(shoppingList.email).futureValue
       stored.value shouldBe empty
     }
 
-    "not delete when only email matches but name does not" in withCustomer {
+    "not delete when name does not match" in withCustomer {
       repository.create(shoppingList).futureValue
 
-      repository.deleteByEmailAndName(shoppingList.email, "Nonexistent").futureValue
+      repository.deleteByEmailNameAndDay(shoppingList.email, "Nonexistent", shoppingList.dayDate).futureValue
 
       val stored = repository.findAllByEmail(shoppingList.email).futureValue
       stored.value should have length 1
     }
 
-    "not delete when only name matches but email does not" in withCustomer {
+    "not delete when email does not match" in withCustomer {
       repository.create(shoppingList).futureValue
 
-      repository.deleteByEmailAndName("other@example.com", shoppingList.name).futureValue
+      repository.deleteByEmailNameAndDay("other@example.com", shoppingList.name, shoppingList.dayDate).futureValue
+
+      val stored = repository.findAllByEmail(shoppingList.email).futureValue
+      stored.value should have length 1
+    }
+
+    "not delete when day does not match" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      repository.deleteByEmailNameAndDay(shoppingList.email, shoppingList.name, LocalDate.of(2026, 7, 20)).futureValue
 
       val stored = repository.findAllByEmail(shoppingList.email).futureValue
       stored.value should have length 1
     }
 
     "return Right(()) when no matching shopping list exists" in withCustomer {
-      val result = repository.deleteByEmailAndName("nobody@example.com", "Nonexistent").futureValue
+      val result = repository.deleteByEmailNameAndDay("nobody@example.com", "Nonexistent", LocalDate.of(2026, 7, 5)).futureValue
 
       result.value shouldBe (())
     }
@@ -203,7 +212,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       ).futureValue
 
       val remaining = repository.findAllByEmail(shoppingList.email).futureValue
-      remaining.value should have length 1  // Expect one to remain — this will FAIL with current impl
+      remaining.value should have length 1
+      remaining.value.head.dayDate shouldBe LocalDate.of(2026, 7, 12)
     }
   }
 

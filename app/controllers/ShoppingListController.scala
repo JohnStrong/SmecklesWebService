@@ -47,13 +47,6 @@ class ShoppingListController @Inject()(
       }
     }
 
-  def delete(email: String, name: String): Action[AnyContent] = authenticated.async { _ =>
-    service.delete(email, name).map {
-      case Right(_) => NoContent
-      case Left(errorMessage) => InternalServerError(Json.obj("error" -> errorMessage))
-    }
-  }
-
   def deleteV2(email: String, dayDate: LocalDate, name: String) = authenticated.async { _ =>
     service.delete(email, dayDate, name).map {
       case Right(_) => NoContent
