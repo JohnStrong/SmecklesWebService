@@ -10,7 +10,7 @@ GET     /api/v1/customers/:email/shopping-lists                         controll
 # Create a new shopping list for a customer
 POST    /api/v1/customers/:email/shopping-lists                         controllers.ShoppingListController.create(email: String)
 # Delete shopping list on some day with specified name
-DELETE  /api/v1/customers/:email/shopping-lists/:dayDate/:name          controllers.ShoppingListController.deleteV2(email: String, dayDate: java.time.LocalDate, name: String)
+DELETE  /api/v1/customers/:email/shopping-lists/:dayDate/:name          controllers.ShoppingListController.delete(email: String, dayDate: java.time.LocalDate, name: String)
 # Update an item status (pending, complete)
 PATCH   /api/v1/customers/:email/shopping-lists/:name/items/:itemName   controllers.ShoppingListController.updateItemStatus(email: String, name: String, itemName: String)
 
