@@ -5,7 +5,7 @@ import play.api.libs.json.*
 import play.api.test.*
 import play.api.test.Helpers.*
 
-class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTest {
+class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTest with CustomerFixture {
 
   // Helper to create a valid item JSON
   private def validItemJson(name: String = "Milk", quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
@@ -64,10 +64,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     // --- Behaviour tests ---
 
     "create a shopping list and retrieve it then delete it" in {
-      val createCustomer = FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "shopper@test.com"))
-      status(route(app, createCustomer).get) mustBe CREATED
+      createCustomer("shopper@test.com")
 
       val createList = FakeRequest(POST, "/api/v1/customers/shopper@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
@@ -117,10 +114,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "return 409 when creating a shopping list with the same name on the same day" in {
-      val createCustomer = FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "dup-shopper@test.com"))
-      status(route(app, createCustomer).get) mustBe CREATED
+      createCustomer("dup-shopper@test.com")
 
       val body = validCreateBody(name = "Groceries", dayDate = "2026-07-05")
 
@@ -136,10 +130,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "allow creating the same list name on different days" in {
-      val createCustomer = FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "weekly@test.com"))
-      status(route(app, createCustomer).get) mustBe CREATED
+      createCustomer("weekly@test.com")
 
       val week1 = validCreateBody(name = "Weekly Groceries", dayDate = "2026-07-05")
       val week2 = validCreateBody(name = "Weekly Groceries", dayDate = "2026-07-12")
@@ -158,10 +149,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "delete only one list when same name exists on different days" in {
-      val createCustomer = FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "delete-day@test.com"))
-      status(route(app, createCustomer).get) mustBe CREATED
+      createCustomer("delete-day@test.com")
 
       // Create same list name on two different days
       val july5 = validCreateBody(name = "Weekly Groceries", dayDate = "2026-07-05")
@@ -189,10 +177,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "allow creating two shopping lists with different names on the same day" in {
-      val createCustomer = FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "multi-list@test.com"))
-      status(route(app, createCustomer).get) mustBe CREATED
+      createCustomer("multi-list@test.com")
 
       val list1 = validCreateBody(name = "Groceries", dayDate = "2026-07-05")
       val list2 = validCreateBody(name = "Hardware", dayDate = "2026-07-05")
@@ -296,9 +281,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
 
     "mark an item as completed and return 200 with updated item" in {
       // Setup: create customer + shopping list
-      status(route(app, FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "patcher@test.com"))).get) mustBe CREATED
+      createCustomer("patcher@test.com")
 
       status(route(app, FakeRequest(POST, "/api/v1/customers/patcher@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
@@ -335,9 +318,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "revert an item back to pending and return 200" in {
-      status(route(app, FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "reverter@test.com"))).get) mustBe CREATED
+      createCustomer("reverter@test.com")
 
       status(route(app, FakeRequest(POST, "/api/v1/customers/reverter@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
@@ -358,9 +339,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "return 200 when item already has the requested status (idempotent)" in {
-      status(route(app, FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "conflict@test.com"))).get) mustBe CREATED
+      createCustomer("conflict@test.com")
 
       status(route(app, FakeRequest(POST, "/api/v1/customers/conflict@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
@@ -377,9 +356,7 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
     }
 
     "return 404 when item name does not exist" in {
-      status(route(app, FakeRequest(POST, "/api/v1/customers")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "notfound@test.com"))).get) mustBe CREATED
+      createCustomer("notfound@test.com")
 
       status(route(app, FakeRequest(POST, "/api/v1/customers/notfound@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
