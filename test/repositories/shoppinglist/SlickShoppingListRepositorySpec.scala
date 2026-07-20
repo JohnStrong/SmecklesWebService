@@ -7,9 +7,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.play.guice.GuiceOneAppPerTest
-import play.api.db.slick.DatabaseConfigProvider
+import repositories.RepositoryTestFixture
 import repositories.customer.SlickCustomerRepository
-import slick.jdbc.JdbcProfile
 
 import java.time.LocalDate
 
@@ -17,7 +16,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
   with Matchers
   with ScalaFutures
   with EitherValues
-  with GuiceOneAppPerTest {
+  with GuiceOneAppPerTest
+  with RepositoryTestFixture {
 
   implicit val patience: PatienceConfig = PatienceConfig(
     timeout = Span(5, Seconds),
@@ -25,7 +25,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
   )
 
   private def repository = app.injector.instanceOf[SlickShoppingListRepository]
-  private def customerRepository = app.injector.instanceOf[SlickCustomerRepository]
+  protected def customerRepository = app.injector.instanceOf[SlickCustomerRepository]
 
   private val shoppingList = ShoppingListWithItems(
     email = "test@example.com",
@@ -37,19 +37,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       ShoppingListItem(name = "Bread", quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
     ))
 
-  private def withCustomer(test: Long => Any): Unit = {
-    val dbConfigProvider = app.injector.instanceOf[DatabaseConfigProvider]
-    val dbConfig = dbConfigProvider.get[JdbcProfile]
-    import dbConfig.profile.api.*
-    val userId = dbConfig.db.run(
-      sqlu"INSERT INTO users (email) VALUES ('test@user.com')"
-        .andThen(sql"SELECT id FROM users WHERE email = 'test@user.com'".as[Long].head)
-    ).futureValue
-    customerRepository.create(Customer(email = shoppingList.email, userId = userId)).futureValue
-    test(userId)
-  }
-
-  private def withCustomer(test: => Any): Unit = withCustomer((_: Long) => test)
+  private def withCustomer(test: Long => Any): Unit = withCustomer(shoppingList.email)(test)
+  private def withCustomer(test: => Any): Unit = withCustomer(shoppingList.email)(test)
 
   "create" should {
     "insert the shopping list and items into the db" in withCustomer {
