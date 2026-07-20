@@ -23,7 +23,7 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Delete Customer](#delete-customer)
   - [Get Customer Budgets](#get-customer-budgets)
   - [Create Customer Budget](#create-customer-budget)
-  - [Update Customer Budget](#update-customer-budget-planned)
+  - [Update Customer Budget](#update-customer-budget)
   - [Delete Customer Budget](#delete-customer-budget-planned)
   - [Create Shopping List](#create-shopping-list)
   - [Get Shopping Lists](#get-shopping-lists)
@@ -548,7 +548,7 @@ Validation rules:
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
 | 409 | `{"error": "Budget period overlaps with an existing budget (2026-07-01 to 2026-08-01)"}` |
 
-### Update Customer Budget (PLANNED)
+### Update Customer Budget
 
 ```
 PUT /api/v1/customers/:email/budgets/:period_start
@@ -575,12 +575,14 @@ DELETE /api/v1/customers/:email/budgets/:period_start
 
 Deletes a budget by its period start date. Does not delete associated expenses (expenses are historical records).
 
+The operation is idempotent — deleting a budget that does not exist returns 204 (not an error).
+
 | Status | Response |
 |--------|----------|
-| 204 | No content — budget deleted |
+| 204 | No content — budget deleted (or did not exist) |
+| 400 | `{"error": "Invalid date format for 'periodStart': expected yyyy-MM-dd, got '...'"}` — malformed date |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
-| 404 | `{"error": "No budget found for period starting 2026-07-01"}` |
 
 ### Create Shopping List
 
