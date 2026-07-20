@@ -209,7 +209,6 @@ No `remaining` column is stored — it's derived at query time.
 3. **Auditable** — the ledger shows exactly what was deducted, when, and from which source
 4. **Future automation** — scheduled jobs check source tables for due items and insert into expenses
 5. **Analytics/recommendations** — query one table for spending patterns across all categories
-6. **Manual entries** — expenses with no source (cash purchases, transfers) fit naturally
 
 ### Tables
 
@@ -266,21 +265,21 @@ CREATE TABLE expenses (
     description        VARCHAR(100),           -- human-readable label (e.g. "Milk x2", "Netflix")
     amount_minor       BIGINT NOT NULL,        -- cost in minor currency units
     currency_code      CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
-    source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off', 'manual'
-    source_id          BIGINT,                 -- FK to the originating record (nullable for manual entries)
+    source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off'
+    source_id          BIGINT NOT NULL,        -- FK to the originating record in the source table
     created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_type, source_id),
     FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
 
 CREATE INDEX expenses__by_email_day ON expenses (email, day_date);
 CREATE INDEX expenses__by_category ON expenses (email, category);
-CREATE UNIQUE INDEX expenses__source_uniq ON expenses (source_type, source_id) WHERE source_id IS NOT NULL;
 ```
 
 **Key points:**
 - `source_type` + `source_id` link back to the originating record for auditability
-- The unique index on `(source_type, source_id)` prevents duplicate entries from the same source
-- `source_id = NULL` for manual/cash entries with no backing record
+- The unique constraint on `(source_type, source_id)` prevents duplicate entries from the same source
+- Every expense originates from a source table — no direct insertion into expenses is permitted
 - No `period_start` column — expenses are matched to budgets by `day_date` range at query time
 
 #### `shopping_list_items` — status column (expense trigger)
@@ -516,7 +515,7 @@ The unique index `expenses__source_uniq` on `(source_type, source_id) WHERE sour
 
 3. **No pre-aggregation** — remaining is always computed live. For most users the number of monthly expenses is small enough (< 1000) that this is fast. If performance becomes an issue, a materialised view or cache can be added later.
 
-4. **Category on expense, not on source** — the category lives on the expense row, not on the shopping list or subscription. This allows re-categorisation without touching source tables, and supports manual expense entries that have no source.
+4. **Category on expense, not on source** — the category lives on the expense row, not on the shopping list or subscription. This allows re-categorisation without touching source tables.
 
 
 ## Migration Plans

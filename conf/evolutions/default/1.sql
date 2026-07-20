@@ -47,7 +47,26 @@ CREATE TABLE shopping_list_items (
 CREATE INDEX shopping_list_items__by_list ON shopping_list_items (shopping_list_id);
 CREATE INDEX shopping_lists__by_email_period ON shopping_lists (email, period_start);
 
+CREATE TABLE expenses (
+      id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      email              VARCHAR(320) NOT NULL,
+      day_date           DATE NOT NULL,          -- the day the expense was incurred/due
+      category           VARCHAR(50) NOT NULL,   -- e.g. 'groceries', 'subscriptions', 'bills', 'one-off'
+      description        VARCHAR(100),           -- human-readable label (e.g. "Milk x2", "Netflix")
+      amount_minor       BIGINT NOT NULL,        -- cost in minor currency units
+      currency_code      CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
+      source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off'
+      source_id          BIGINT NOT NULL,         -- FK to the originating record in the source table
+      created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(source_type, source_id),
+      FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
+);
+
+CREATE INDEX expenses__by_email_day ON expenses (email, day_date);
+CREATE INDEX expenses__by_category ON expenses (email, category);
+
 -- !Downs
+DROP TABLE expenses;
 DROP TABLE shopping_list_items;
 DROP TABLE shopping_lists;
 DROP TABLE customer_budgets;
