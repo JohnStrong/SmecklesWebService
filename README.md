@@ -21,8 +21,8 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Create Customer](#create-customer)
   - [Get Customer by Email](#get-customer-by-email)
   - [Delete Customer](#delete-customer)
-  - [Get Customer Budgets](#get-customer-budgets-planned)
-  - [Create Customer Budget](#create-customer-budget-planned)
+  - [Get Customer Budgets](#get-customer-budgets)
+  - [Create Customer Budget](#create-customer-budget)
   - [Update Customer Budget](#update-customer-budget-planned)
   - [Delete Customer Budget](#delete-customer-budget-planned)
   - [Create Shopping List](#create-shopping-list)
@@ -220,53 +220,65 @@ curl -X POST "$SERVICE_URL/api/v1/customers" \
 curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 200 {"email":"hello@example.com"}
 
-# 6. Create shopping list
+# 6. Create customer budget
+curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/budgets" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000,"currency_code":"GBP"}'
+# → 201 {"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000,"currency_code":"GBP"}
+
+# 7. Get customer budgets
+curl -H "Authorization: Bearer $TOKEN" \
+  "$SERVICE_URL/api/v1/customers/hello@example.com/budgets"
+# → 200 [{"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000,"currency_code":"GBP"}]
+
+# 8. Create shopping list
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
 # → 201 {"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}
 
-# 7. Get shopping lists
+# 9. Get shopping lists
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
 # → 200 [{"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}]
 
-# 8. Mark item as completed
+# 10. Mark item as completed
 curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":"completed"}'
 # → 200 {"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"completed"}
 
-# 9. Revert item back to pending
+# 11. Revert item back to pending
 curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":"pending"}'
 # → 200 {"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"}
 
-# 10. Delete shopping list
+# 12. Delete shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/2026-07-05/Weekly%20Groceries"
 # → 204 No Content
 
-# 11. Confirm shopping list is gone
+# 13. Confirm shopping list is gone
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
 # → 200 []
 
-# 12. Delete customer
+# 14. Delete customer
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 204 No Content
 
-# 13. Confirm customer is gone
+# 15. Confirm customer is gone
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com"
 # → 404 {"error":"Customer with email 'hello@example.com' not found."}
 
-# 14. Bad date format returns JSON error (PathBindable + JsonErrorHandler)
+# 16. Bad date format returns JSON error (PathBindable + JsonErrorHandler)
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/not-a-date/Groceries"
 # → 400 {"error":"Invalid date format for 'dayDate': expected yyyy-MM-dd, got 'not-a-date'"}
@@ -491,7 +503,7 @@ DELETE /api/v1/customers/:email
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Customer with email '...' not found."}` — customer does not exist |
 
-### Get Customer Budgets (PLANNED)
+### Get Customer Budgets
 
 ```
 GET /api/v1/customers/:email/budgets
@@ -505,7 +517,7 @@ Returns all budgets for a customer.
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
 
-### Create Customer Budget (PLANNED)
+### Create Customer Budget
 
 ```
 POST /api/v1/customers/:email/budgets
