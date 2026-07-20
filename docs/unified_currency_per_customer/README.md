@@ -148,9 +148,72 @@ object Customer {
 
 ### Phase 6: Expenses — Use `customer.currency_code` on insert
 
-When the expense is created (via `DbExecutor` transactional composition), the `currency_code` comes from the customer, not the source item. Since all items already share the customer's currency after Phase 5, this is consistent.
+When an expense is **created** (e.g. item marked completed), the `currency_code` must be retrieved from the `customers` table within the same composed DBIO action. This ensures the expense always uses the customer's canonical currency.
 
-**File:** Service layer code that composes `updateItemStatusAction` + `expenseRepo.insertAction`
+When an expense is **deleted** (e.g. item reverted to pending), no currency lookup is needed — deletion targets the expense by `source_type + source_id` identity, not by currency.
+
+**Key principle:** `currency_code` lookup happens only on the **insert path**. Delete operations use the source identity to locate the expense row.
+
+**File:** Service layer code that composes repository DBIO actions via `DbExecutor`.
+
+**Example — service composition using the agreed DbExecutor pattern:**
+
+```scala
+class ShoppingListServiceImpl @Inject()(
+  shoppingListRepo: ShoppingListRepository,
+  customerRepo: CustomerRepository,
+  expenseRepo: ExpenseRepository,
+  dbExecutor: DbExecutor
+)(implicit ec: ExecutionContext) extends ShoppingListService {
+
+  override def updateItemStatus(
+    email: String,
+    listName: String,
+    itemName: String,
+    status: String
+  ): Future[Either[String, ShoppingListItem]] = {
+
+    val action = for {
+      itemResult <- shoppingListRepo.updateItemStatusAction(email, listName, itemName, status)
+      result <- itemResult match {
+        case Right(item) if status == "completed" =>
+          // Lookup customer currency on INSERT path only
+          for {
+            customer <- customerRepo.findByEmailAction(email)
+            _ <- expenseRepo.insertAction(Expense(
+              email = email,
+              dayDate = item.dayDate,
+              category = "groceries",
+              description = s"${item.name} x${item.quantity}",
+              amountMinor = item.lineAmountMinor,
+              currencyCode = customer.currencyCode,  // from customer, not item
+              sourceType = "shopping_list_item",
+              sourceId = item.id
+            ))
+          } yield Right(item)
+
+        case Right(item) if status == "pending" =>
+          // DELETE path — no currency lookup needed, target by identity
+          expenseRepo.deleteBySourceAction("shopping_list_item", item.id)
+            .map(_ => Right(item))
+
+        case Right(item) =>
+          DBIO.successful(Right(item))
+
+        case left @ Left(_) =>
+          DBIO.successful(left)
+      }
+    } yield result
+
+    dbExecutor.runTransactionally(action)
+  }
+}
+```
+
+**Notes:**
+- `customerRepo.findByEmailAction(email)` is a new DBIO-returning method on the customer repository (follows the same action factory pattern)
+- The customer lookup is inside the transaction — guarantees consistency if the customer is deleted concurrently
+- After Phase 5, items no longer carry their own `currency_code` from the client — but the stored column still exists for historical reads. The service always uses `customer.currencyCode` when writing expenses.
 
 ### Phase 7: Tests — Update all layers
 
@@ -183,7 +246,7 @@ When the expense is created (via `DbExecutor` transactional composition), the `c
 | `POST /api/v1/customers/:email/shopping-lists` (items) | `currency_code` | Required per item | **Removed** |
 | All GET responses | `currency_code` | Present | **Still present** (from stored data) |
 
-## Open Questions
+## Decisions
 
-1. **Allow currency change?** — If the customer wants to change currency, should we allow it only when no budgets/expenses exist? Or never allow it (delete + recreate customer)?
-2. **GET customer response** — Should we include `currency_code` in the customer response? (Recommended: yes)
+1. **No currency change in V1** — `currency_code` is immutable once set at customer creation. There is no update endpoint for currency. If a customer needs to change currency, they must delete their account and recreate it. This avoids complexity around orphaned budgets/expenses in the old currency and keeps the data model simple for the initial release.
+2. **GET customer response** — Should include `currency_code` so the frontend knows which currency to display. (Recommended: yes)
