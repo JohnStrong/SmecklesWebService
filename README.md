@@ -32,7 +32,6 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Add Item to Shopping List](#add-item-to-shopping-list-planned)
   - [Update Item](#update-item-planned)
   - [Delete Item](#delete-item-planned)
-  - [Examples](#examples)
 - [Database Configuration](#database-configuration)
   - [Per-Environment Configuration](#per-environment-configuration)
   - [Current Setup (Local Development + Functional Tests)](#current-setup-local-development--functional-tests)
@@ -216,12 +215,12 @@ TOKEN=$(curl -s -X POST \
 curl -X POST "$SERVICE_URL/api/v1/customers" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"email":"hello@example.com"}'
-# → 201 {"email":"hello@example.com"}
+  -d '{"email":"hello@example.com","currency_code":"GBP"}'
+# → 201 {"email":"hello@example.com","currency_code":"GBP"}
 
 # 5. Get customer
 curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@example.com"
-# → 200 {"email":"hello@example.com"}
+# → 200 {"email":"hello@example.com","currency_code":"GBP"}
 
 # 6. Create customer budget
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/budgets" \
@@ -417,6 +416,7 @@ A person managed within the app (e.g. a family member, a flatmate). Scoped to an
 |--------|------|-------------|-------|
 | `email` | VARCHAR(320) | PK | Customer identifier |
 | `user_id` | BIGINT | NOT NULL, FK → `users.id` ON DELETE CASCADE | The authenticated user who manages this customer |
+| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code (e.g. GBP, USD, EUR). Immutable once set. |
 
 #### `customer_budgets`
 
@@ -464,6 +464,29 @@ An item within a shopping list. Monetary amounts are stored in minor currency un
 
 Composite unique constraint: `UNIQUE(shopping_list_id, name)` — an item name cannot appear twice within the same list.
 
+#### `expenses`
+
+The unified expense ledger. Each row represents a realised cost — money that has actually left the budget. Entries are created by different triggers depending on the source type (e.g. shopping list item marked completed), but once in this table they are uniform and queryable in one place.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | BIGINT | PK, auto-increment | Generated |
+| `email` | VARCHAR(320) | NOT NULL, FK → `customers.email` ON DELETE CASCADE | Owner customer |
+| `day_date` | DATE | NOT NULL | The day the expense was incurred/due |
+| `category` | VARCHAR(50) | NOT NULL | e.g. 'groceries', 'subscriptions', 'bills', 'one-off' |
+| `description` | VARCHAR(100) | nullable | Human-readable label (e.g. "Milk x2", "Netflix") |
+| `amount_minor` | BIGINT | NOT NULL | Cost in minor currency units |
+| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code |
+| `source_type` | VARCHAR(30) | NOT NULL | Origin: 'shopping_list_item', 'subscription', 'bill', 'one_off' |
+| `source_id` | BIGINT | NOT NULL | FK to the originating record in the source table |
+| `created_at` | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | When the expense was recorded |
+
+Composite unique constraint: `UNIQUE(source_type, source_id)` — prevents duplicate entries from the same source record.
+
+Indexes:
+- `expenses__by_email_day` on `(email, day_date)` — efficient budget remaining calculation
+- `expenses__by_category` on `(email, category)` — spending breakdown queries
+
 ## API
 
 > **All endpoints except `/health` require authentication.** Include `Authorization: Bearer <token>` in every request. The token's email must also be in the configured allowlist. See [Authentication](#authentication) for details.
@@ -486,13 +509,17 @@ No authentication required.
 POST /api/v1/customers
 Content-Type: application/json
 
-{"email": "user@example.com"}
+{"email": "user@example.com", "currency_code": "GBP"}
 ```
+
+Validation rules:
+- `email` — required, cannot be empty
+- `currency_code` — required, must be exactly 3 characters (ISO 4217). Immutable once set.
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"email": "user@example.com"}` |
-| 400 | `{"error": "Email is required"}` — missing, null, or empty string |
+| 201 | `{"email": "user@example.com", "currency_code": "GBP"}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure (missing/invalid email or currency_code) |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 409 | `{"error": "Customer with email ... already exists."}` |
@@ -505,7 +532,7 @@ GET /api/v1/customers/:email
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"email": "user@example.com"}` |
+| 200 | `{"email": "user@example.com", "currency_code": "GBP"}` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 404 | `{"error": "Customer with email ... not found."}` |
@@ -751,46 +778,6 @@ Removes an item from a shopping list. The operation is idempotent — deleting a
 | 204 | No content — item removed (or did not exist) |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
-
-### Examples
-
-```bash
-# Create a customer
-curl -X POST http://localhost:9000/api/v1/customers \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"hello@example.com"}'
-
-# Get customer by email
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:9000/api/v1/customers/hello@example.com
-
-# Create a shopping list
-curl -X POST http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
-
-# Get all shopping lists for a customer
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists
-
-# Mark an item as completed
-curl -X PATCH http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"completed"}'
-
-# Revert an item back to pending
-curl -X PATCH http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"pending"}'
-
-# Delete a shopping list
-curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-  http://localhost:9000/api/v1/customers/hello@example.com/shopping-lists/2026-07-05/Weekly%20Groceries
-```
 
 ## Database Configuration
 
