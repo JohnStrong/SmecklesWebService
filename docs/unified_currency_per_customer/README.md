@@ -47,7 +47,7 @@ The UI makes a single call to `GET /api/v1/customers/:email` on login, stores `c
 - Joins or lookups on the read path to include currency in every response
 - Redundant data repeated across hundreds of rows
 
-The backend only needs the customer's currency on the **expense insert path** (to validate consistency within the transaction).
+The backend never needs to look up currency for any operation. All amounts are stored and computed as minor unit integers. Currency is only relevant for frontend display.
 
 ## End-to-End Flow
 
@@ -134,10 +134,7 @@ The backend only needs the customer's currency on the **expense insert path** (t
 │    │  1. UPDATE shopping_list_items SET status='completed'              │     │
 │    │     WHERE list=Groceries AND name=Milk                            │     │
 │    │                                                                   │     │
-│    │  2. SELECT currency_code FROM customers                           │     │
-│    │     WHERE email='alice@example.com'  → GBP                        │     │
-│    │                                                                   │     │
-│    │  3. INSERT INTO expenses                                          │     │
+│    │  2. INSERT INTO expenses                                          │     │
 │    │     (email, day_date, category, description,                      │     │
 │    │      amount_minor, source_type, source_id)                        │     │
 │    │     VALUES ('alice@example.com', '2026-07-05', 'groceries',       │     │
@@ -210,7 +207,7 @@ Remove `currency_code` column from:
 - `shopping_list_items`
 - `expenses`
 
-These tables store amounts in minor units only. The currency is always the customer's currency, resolved by joining on `email` when needed (which is only on the expense insert path — not on reads).
+These tables store amounts in minor units only. The currency is always the customer's currency, known to the frontend from `GET /api/v1/customers/:email`. No joins or lookups are needed at the backend for currency resolution.
 
 ### Phase 2: Model — Update `Customer` case class
 
