@@ -67,14 +67,7 @@ class SlickBudgetRepository @Inject()(
           DBIO.successful(Left(s"Budget period overlaps with an existing budget (${existing.periodStart} to ${existing.periodEnd})"))
         case None =>
           for {
-            _ <- customerBudgets += CustomerBudgetRow(
-              0L,
-              budget.email,
-              budget.periodStart,
-              budget.periodEnd,
-              budget.amountMinor,
-              budget.currencyCode
-            )
+            _ <- insertBudget(budget)
           } yield Right(budget)
       }
     } yield result).transactionally
@@ -82,17 +75,25 @@ class SlickBudgetRepository @Inject()(
     db.run(action)
   }
 
+  override def update(budget: Budget): Future[Either[String, Budget]] = ???
+
+  override def delete(email: String, periodStart: LocalDate): Unit = ???
+
   private def filterByEmail(email: String) =
     customerBudgets.filter(cb => cb.email === email)
 
   private def filterByEmailAndRange(email: String, periodStart: LocalDate, periodEnd: LocalDate) =
     customerBudgets.filter(cb =>
       cb.email === email &&
-      cb.periodStart < periodEnd &&
-      cb.periodEnd > periodStart)
+        cb.periodStart < periodEnd &&
+        cb.periodEnd > periodStart)
 
-  override def update(budget: Budget): Future[Either[String, Budget]] = ???
-
-  override def delete(email: String, periodStart: LocalDate): Unit = ???
-
+  private def insertBudget(budget: Budget) = customerBudgets += CustomerBudgetRow(
+    0L,
+    budget.email,
+    budget.periodStart,
+    budget.periodEnd,
+    budget.amountMinor,
+    budget.currencyCode
+  )
 }
