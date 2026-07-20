@@ -129,4 +129,44 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
       result.left.value should include("overlaps")
     }
   }
+
+  "get" should {
+
+    "return empty list when customer has no budgets" in withCustomer {
+      val result = repository.get(julyBudget.email).futureValue
+
+      result.value shouldBe empty
+    }
+
+    "return a single budget for a customer" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val result = repository.get(julyBudget.email).futureValue
+
+      result.value should have length 1
+      result.value.head shouldBe julyBudget
+    }
+
+    "return multiple budgets for a customer" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val augustBudget = julyBudget.copy(
+        periodStart = LocalDate.of(2026, 8, 1),
+        periodEnd = LocalDate.of(2026, 9, 1)
+      )
+      repository.create(augustBudget).futureValue
+
+      val result = repository.get(julyBudget.email).futureValue
+
+      result.value should have length 2
+    }
+
+    "not return budgets belonging to other customers" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val result = repository.get("other@example.com").futureValue
+
+      result.value shouldBe empty
+    }
+  }
 }

@@ -49,7 +49,12 @@ class SlickBudgetRepository @Inject()(
   }
   private val customerBudgets = TableQuery[CustomerBudgetsTable]
 
-  override def get(email: String): Future[Either[String, List[Budget]]] = ???
+  override def get(email: String): Future[Either[String, List[Budget]]] = {
+    val action = for {
+      budgets <- filterByEmail(email).result
+    } yield Right(budgets.map(row => CustomerBudgetRow.toBudget(row)).toList)
+    db.run(action)
+  }
 
   override def create(budget: Budget): Future[Either[String, Budget]] = {
     val action = (for {
@@ -76,6 +81,9 @@ class SlickBudgetRepository @Inject()(
 
     db.run(action)
   }
+
+  private def filterByEmail(email: String) =
+    customerBudgets.filter(cb => cb.email === email)
 
   private def filterByEmailAndRange(email: String, periodStart: LocalDate, periodEnd: LocalDate) =
     customerBudgets.filter(cb =>
