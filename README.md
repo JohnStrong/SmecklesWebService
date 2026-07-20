@@ -29,6 +29,9 @@ A personal budgeting companion that grows with you — from simple shopping list
   - [Get Shopping Lists](#get-shopping-lists)
   - [Delete Shopping List](#delete-shopping-list)
   - [Update Item Status](#update-item-status)
+  - [Add Item to Shopping List](#add-item-to-shopping-list-planned)
+  - [Update Item](#update-item-planned)
+  - [Delete Item](#delete-item-planned)
   - [Examples](#examples)
 - [Database Configuration](#database-configuration)
   - [Per-Environment Configuration](#per-environment-configuration)
@@ -677,6 +680,60 @@ Valid status values: `pending`, `completed`.
 | 404 | `{"error": "Item not found"}` — item name does not exist within this shopping list |
 
 The operation is idempotent — setting an item to its current status returns 200 with the unchanged item.
+
+### Add Item to Shopping List (PLANNED)
+
+```
+POST /api/v1/customers/:email/shopping-lists/:name/items
+Content-Type: application/json
+
+{"name": "Eggs", "quantity": 6, "currency_code": "GBP", "unit_amount_minor": 200}
+```
+
+Adds a new item to an existing shopping list. `line_amount_minor` is computed server-side. Item name must be unique within the list.
+
+| Status | Response |
+|--------|----------|
+| 201 | `{"name": "Eggs", "quantity": 6, "currency_code": "GBP", "unit_amount_minor": 200, "line_amount_minor": 1200, "status": "pending"}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
+| 404 | `{"error": "Shopping list not found"}` — list does not exist |
+| 409 | `{"error": "Item 'Eggs' already exists in this list"}` |
+
+### Update Item (PLANNED)
+
+```
+PUT /api/v1/customers/:email/shopping-lists/:name/items/:item_name
+Content-Type: application/json
+
+{"quantity": 3, "currency_code": "GBP", "unit_amount_minor": 150}
+```
+
+Replaces the quantity, currency, and unit price of an existing item. `line_amount_minor` is recomputed server-side. Uses PUT because all mutable fields are always required. Item name and status are not changeable via this endpoint.
+
+| Status | Response |
+|--------|----------|
+| 200 | `{"name": "Eggs", "quantity": 3, "currency_code": "GBP", "unit_amount_minor": 150, "line_amount_minor": 450, "status": "pending"}` |
+| 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
+| 404 | `{"error": "Shopping list not found"}` — list does not exist |
+| 404 | `{"error": "Item not found"}` — item name does not exist in this list |
+
+### Delete Item (PLANNED)
+
+```
+DELETE /api/v1/customers/:email/shopping-lists/:name/items/:item_name
+```
+
+Removes an item from a shopping list. The operation is idempotent — deleting an item that does not exist returns 204.
+
+| Status | Response |
+|--------|----------|
+| 204 | No content — item removed (or did not exist) |
+| 401 | `{"error": "Missing or malformed Authorization header"}` |
+| 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
 
 ### Examples
 
