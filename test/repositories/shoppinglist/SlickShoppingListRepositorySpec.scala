@@ -1,5 +1,6 @@
 package repositories.shoppinglist
 
+import db.DbExecutor
 import models.{Customer, ShoppingListItem, ShoppingListWithItems}
 import org.scalatest.EitherValues
 import org.scalatest.concurrent.ScalaFutures
@@ -11,6 +12,7 @@ import repositories.RepositoryTestFixture
 import repositories.customer.SlickCustomerRepository
 
 import java.time.LocalDate
+import scala.concurrent.ExecutionContext
 
 class SlickShoppingListRepositorySpec extends AnyWordSpec
   with Matchers
@@ -19,12 +21,15 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
   with GuiceOneAppPerTest
   with RepositoryTestFixture {
 
+  implicit private val ec: ExecutionContext = ExecutionContext.global
+
   implicit val patience: PatienceConfig = PatienceConfig(
     timeout = Span(5, Seconds),
     interval = Span(100, Millis)
   )
 
   private def repository = app.injector.instanceOf[SlickShoppingListRepository]
+  private def dbExecutor = app.injector.instanceOf[DbExecutor]
   protected def customerRepository = app.injector.instanceOf[SlickCustomerRepository]
 
   private val shoppingList = ShoppingListWithItems(
@@ -260,4 +265,73 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     }
   }
 
+  "updateItemStatusAction" should {
+
+    "return Right with updated item when marking as completed" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val action = repository.updateItemStatusAction("test@example.com", "test-1", "Milk", "completed")
+      val result = dbExecutor.run(action).futureValue
+
+      result.value.name shouldBe "Milk"
+      result.value.status shouldBe "completed"
+      result.value.quantity shouldBe 2
+      result.value.currencyCode shouldBe "GBP"
+      result.value.unitAmountMinor shouldBe 129L
+      result.value.lineAmountMinor shouldBe 258L
+    }
+
+    "return Right with updated item when reverting to pending" in withCustomer {
+      repository.create(shoppingList).futureValue
+      dbExecutor.run(repository.updateItemStatusAction("test@example.com", "test-1", "Milk", "completed")).futureValue
+
+      val action = repository.updateItemStatusAction("test@example.com", "test-1", "Milk", "pending")
+      val result = dbExecutor.run(action).futureValue
+
+      result.value.name shouldBe "Milk"
+      result.value.status shouldBe "pending"
+    }
+
+    "return Left when shopping list does not exist" in withCustomer {
+      val action = repository.updateItemStatusAction("test@example.com", "nonexistent", "Milk", "completed")
+      val result = dbExecutor.run(action).futureValue
+
+      result.left.value shouldBe "Item not found"
+    }
+
+    "return Left when item does not exist in the list" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val action = repository.updateItemStatusAction("test@example.com", "test-1", "Nonexistent", "completed")
+      val result = dbExecutor.run(action).futureValue
+
+      result.left.value shouldBe "Item not found"
+    }
+
+    "return Right when item already has the requested status (idempotent)" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val action = repository.updateItemStatusAction("test@example.com", "test-1", "Milk", "pending")
+      val result = dbExecutor.run(action).futureValue
+
+      result.value.name shouldBe "Milk"
+      result.value.status shouldBe "pending"
+    }
+
+    "be composable with other DBIO actions in a single transaction" in withCustomer {
+      repository.create(shoppingList).futureValue
+
+      val composedAction = for {
+        item1 <- repository.updateItemStatusAction("test@example.com", "test-1", "Milk", "completed")
+        item2 <- repository.updateItemStatusAction("test@example.com", "test-1", "Bread", "completed")
+      } yield (item1, item2)
+
+      val (result1, result2) = dbExecutor.runTransactionally(composedAction).futureValue
+
+      result1.value.name shouldBe "Milk"
+      result1.value.status shouldBe "completed"
+      result2.value.name shouldBe "Bread"
+      result2.value.status shouldBe "completed"
+    }
+  }
 }

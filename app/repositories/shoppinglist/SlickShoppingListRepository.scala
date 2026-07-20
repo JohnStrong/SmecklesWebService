@@ -47,6 +47,19 @@ object DecoupledShoppingList {
     )
 }
 
+object DecoupledShoppingListItem {
+  def toShoppingListItem(row: DecoupledShoppingListItem, status: String): ShoppingListItem = {
+    ShoppingListItem(
+      name = row.name,
+      quantity = row.quantity,
+      currencyCode = row.currencyCode,
+      unitAmountMinor = row.unitAmountMinor,
+      lineAmountMinor = row.lineAmountMinor,
+      status = status
+    )
+  }
+}
+
 class SlickShoppingListRepository @Inject()(
    protected val dbConfigProvider: DatabaseConfigProvider
 )(implicit ec: ExecutionContext)
@@ -142,7 +155,12 @@ class SlickShoppingListRepository @Inject()(
   }
 
   override def updateItemStatus(email: String, listName: String, itemName: String, status: String): Future[Either[String, ShoppingListItem]] = {
-    val action = (for {
+    val action = updateItemStatusAction(email, listName, itemName, status).transactionally
+    db.run(action)
+  }
+
+  override def updateItemStatusAction(email: String, listName: String, itemName: String, status: String): DBIO[Either[String,ShoppingListItem]] = {
+    for {
       // Find the shopping list by email and name
       listOpt <- shoppingLists.filter(sl => sl.email === email && sl.name === listName).result.headOption
       result <- listOpt match {
@@ -155,31 +173,17 @@ class SlickShoppingListRepository @Inject()(
             res <- itemOpt match {
               case None => DBIO.successful(Left("Item not found"))
               case Some(item) if item.status == status =>
-                DBIO.successful(Right(ShoppingListItem(
-                  name = item.name,
-                  quantity = item.quantity,
-                  currencyCode = item.currencyCode,
-                  unitAmountMinor = item.unitAmountMinor,
-                  lineAmountMinor = item.lineAmountMinor,
-                  status = item.status
-                )))
+                DBIO.successful(
+                  Right(DecoupledShoppingListItem.toShoppingListItem(item, item.status))
+                )
               case Some(item) =>
                 for {
                   _ <- itemQuery.map(_.status).update(status)
-                } yield Right(ShoppingListItem(
-                  name = item.name,
-                  quantity = item.quantity,
-                  currencyCode = item.currencyCode,
-                  unitAmountMinor = item.unitAmountMinor,
-                  lineAmountMinor = item.lineAmountMinor,
-                  status = status
-                ))
+                } yield Right(DecoupledShoppingListItem.toShoppingListItem(item, status))
             }
           } yield res
       }
-    } yield result).transactionally
-
-    db.run(action)
+    } yield result
   }
 
   private def emailFilter(email: String) = shoppingLists.filter(_.email === email)
