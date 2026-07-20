@@ -1,6 +1,7 @@
 import models.{Customer, ShoppingListWithItems, User}
 import services.{BudgetService, BudgetServiceImpl, CustomerService, CustomerServiceImpl, ShoppingListService, ShoppingListServiceImpl}
 import com.google.inject.{AbstractModule, TypeLiteral}
+import db.{DbExecutor, SlickDbExecutor}
 import repositories.DataRepository
 import repositories.budget.{BudgetRepository, SlickBudgetRepository}
 import repositories.customer.SlickCustomerRepository
@@ -10,6 +11,11 @@ import auth.{JwkProviderFactory, GoogleJwkProviderFactory}
 
 class Module extends AbstractModule {
   override def configure(): Unit = {
+
+    /**
+     * Database
+     */
+    bind(classOf[DbExecutor]).to(classOf[SlickDbExecutor])
 
     /**
      * User
