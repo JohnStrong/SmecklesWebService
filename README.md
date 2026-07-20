@@ -388,13 +388,19 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9000/api/v1/customers/me
 users 1──────┐
              │ owns (FK: customers.user_id → users.id)
              ▼
-customers 1──────┐
-                 │ FK: shopping_lists.email → customers.email
-                 ▼
-shopping_lists 1──────┐
-                      │ FK: shopping_list_items.shopping_list_id → shopping_lists.id
+customers 1──────┬──────────────────────────────────┐
+                 │                                   │
+                 │ FK: email                         │ FK: email
+                 ▼                                   ▼
+shopping_lists 1──────┐                    customer_budgets
+                      │
+                      │ FK: shopping_list_id
                       ▼
-               shopping_list_items
+           shopping_list_items
+                      │
+                      │ triggers (status → 'completed')
+                      ▼
+                  expenses ←── FK: customers.email
 ```
 
 ### Tables
