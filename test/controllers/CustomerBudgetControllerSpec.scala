@@ -166,4 +166,70 @@ class CustomerBudgetControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
   }
+
+  "update" should {
+
+    "return 200 with updated budget on success" in {
+      val (controller, mockService) = createFixture()
+      val updated = testBudget.copy(amountMinor = 250000L)
+      when(mockService.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP"))
+        .thenReturn(Future.successful(Right(updated)))
+
+      val request = FakeRequest(PUT, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("amount_minor" -> 250000, "currency_code" -> "GBP"))
+      val result = controller.update("user@example.com", LocalDate.of(2026, 7, 1)).apply(request)
+
+      status(result) shouldBe OK
+      (contentAsJson(result) \ "amount_minor").as[Long] shouldBe 250000L
+      (contentAsJson(result) \ "currency_code").as[String] shouldBe "GBP"
+    }
+
+    "return 404 when budget not found" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP"))
+        .thenReturn(Future.successful(Left("No budget found for period starting 2026-07-01")))
+
+      val request = FakeRequest(PUT, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("amount_minor" -> 250000, "currency_code" -> "GBP"))
+      val result = controller.update("user@example.com", LocalDate.of(2026, 7, 1)).apply(request)
+
+      status(result) shouldBe NOT_FOUND
+      (contentAsJson(result) \ "error").as[String] should include("No budget found")
+    }
+
+    "return 400 when request body is invalid" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(PUT, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("bad" -> "data"))
+      val result = controller.update("user@example.com", LocalDate.of(2026, 7, 1)).apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when amount_minor is negative" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(PUT, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("amount_minor" -> -1, "currency_code" -> "GBP"))
+      val result = controller.update("user@example.com", LocalDate.of(2026, 7, 1)).apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is not 3 characters" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(PUT, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("amount_minor" -> 250000, "currency_code" -> "GB"))
+      val result = controller.update("user@example.com", LocalDate.of(2026, 7, 1)).apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+  }
 }

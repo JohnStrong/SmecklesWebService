@@ -92,4 +92,39 @@ class BudgetServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures 
       result.getMessage shouldBe "Connection reset"
     }
   }
+
+  "update" should {
+
+    "return Right with updated budget on success" in {
+      val (service, mockRepo) = freshService()
+      val updated = testBudget.copy(amountMinor = 250000L)
+      when(mockRepo.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP"))
+        .thenReturn(Future.successful(Right(updated)))
+
+      val result = service.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP").futureValue
+
+      result shouldBe Right(updated)
+    }
+
+    "return Left when budget not found" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.update("user@example.com", LocalDate.of(2026, 9, 1), 100000L, "GBP"))
+        .thenReturn(Future.successful(Left("No budget found for period starting 2026-09-01")))
+
+      val result = service.update("user@example.com", LocalDate.of(2026, 9, 1), 100000L, "GBP").futureValue
+
+      result shouldBe a[Left[_, _]]
+      result.left.toOption.get should include("No budget found")
+    }
+
+    "propagate failure when repo throws" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP"))
+        .thenReturn(Future.failed(new RuntimeException("Connection reset")))
+
+      val result = service.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP").failed.futureValue
+
+      result.getMessage shouldBe "Connection reset"
+    }
+  }
 }

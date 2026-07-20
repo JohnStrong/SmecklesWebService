@@ -4,7 +4,7 @@ import javax.inject.*
 import play.api.mvc.*
 import play.api.libs.json.*
 import models.Budget
-import models.requests.CustomerBudgetCreateRequest
+import models.requests.{CustomerBudgetCreateRequest, CustomerBudgetUpdateRequest}
 import services.BudgetService
 import auth.AuthenticatedAction
 
@@ -45,8 +45,18 @@ class CustomerBudgetController @Inject()(
     }
   }
 
-  def update(email: String, periodStart: LocalDate): Action[JsValue] = authenticated.async(parse.json) { _ =>
-    Future.successful(NotImplemented(Json.obj("error" -> "Update budget is not yet implemented")))
+  def update(email: String, periodStart: LocalDate): Action[JsValue] = authenticated.async(parse.json) { request =>
+    request.body.validate[CustomerBudgetUpdateRequest] match {
+      case JsError(errors) => Future.successful {
+        BadRequest(Json.obj("error" -> "Invalid request format", "details" -> JsError.toJson(errors)))
+      }
+      case JsSuccess(updateRequest, _) =>
+        budgetService.update(email, periodStart, updateRequest.amountMinor, updateRequest.currencyCode).map {
+          case Right(budget) => Ok(Json.toJson(budget))
+          case Left(msg) if msg.contains("No budget found") => NotFound(Json.obj("error" -> msg))
+          case Left(msg) => InternalServerError(Json.obj("error" -> msg))
+        }
+    }
   }
 
   def delete(email: String, periodStart: LocalDate): Action[AnyContent] = authenticated.async { _ =>
