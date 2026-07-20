@@ -1,5 +1,7 @@
 package models
 
+import play.api.libs.json.*
+import play.api.libs.functional.syntax._
 import java.time.LocalDate
 
 case class Budget(
@@ -9,3 +11,13 @@ case class Budget(
    amountMinor: Long,
    currencyCode: String
 )
+
+object Budget {
+  implicit val writes: Writes[Budget] = (
+    (__ \ "email").write[String] and
+    (__ \ "period_start").write[LocalDate] and
+    (__ \ "period_end").write[LocalDate] and
+    (__ \ "amount_minor").write[Long] and
+    (__ \ "currency_code").write[String]
+  )(b => (b.email, b.periodStart, b.periodEnd, b.amountMinor, b.currencyCode))
+}
