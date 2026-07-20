@@ -62,12 +62,12 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
     "return 409 when creating a duplicate customer" in {
       val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "duplicate@test.com"))
+        .withBody(Json.obj("email" -> "duplicate@test.com", "currency_code" -> "GBP"))
       status(route(app, request).get) mustBe CREATED
 
       val duplicate = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "duplicate@test.com"))
+        .withBody(Json.obj("email" -> "duplicate@test.com", "currency_code" -> "GBP"))
       val response = route(app, duplicate).get
       status(response) mustBe CONFLICT
     }
@@ -75,7 +75,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
     "return 400 when email is missing" in {
       val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("name" -> "no email"))
+        .withBody(Json.obj("currency_code" -> "GBP"))
       val response = route(app, request).get
       status(response) mustBe BAD_REQUEST
     }
@@ -83,7 +83,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
     "return 400 when email is empty" in {
       val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> ""))
+        .withBody(Json.obj("email" -> "", "currency_code" -> "GBP"))
       val response = route(app, request).get
       status(response) mustBe BAD_REQUEST
     }
@@ -91,7 +91,31 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
     "return 400 when email is null" in {
       val request = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> JsNull))
+        .withBody(Json.obj("email" -> JsNull, "currency_code" -> "GBP"))
+      val response = route(app, request).get
+      status(response) mustBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is missing" in {
+      val request = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "valid@test.com"))
+      val response = route(app, request).get
+      status(response) mustBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is too short" in {
+      val request = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "valid@test.com", "currency_code" -> "GB"))
+      val response = route(app, request).get
+      status(response) mustBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is too long" in {
+      val request = FakeRequest(POST, "/api/v1/customers")
+        .withHeaders(authHeader(), "Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "valid@test.com", "currency_code" -> "GBPP"))
       val response = route(app, request).get
       status(response) mustBe BAD_REQUEST
     }
@@ -106,17 +130,17 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
       // Create
       val create = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "lifecycle@test.com"))
+        .withBody(Json.obj("email" -> "lifecycle@test.com", "currency_code" -> "GBP"))
       val createResponse = route(app, create).get
       status(createResponse) mustBe CREATED
-      contentAsJson(createResponse) mustBe Json.obj("email" -> "lifecycle@test.com")
+      contentAsJson(createResponse) mustBe Json.obj("email" -> "lifecycle@test.com", "currency_code" -> "GBP")
 
       // Get — exists
       val get = FakeRequest(GET, "/api/v1/customers/lifecycle@test.com")
         .withHeaders(authHeader())
       val getResponse = route(app, get).get
       status(getResponse) mustBe OK
-      contentAsJson(getResponse) mustBe Json.obj("email" -> "lifecycle@test.com")
+      contentAsJson(getResponse) mustBe Json.obj("email" -> "lifecycle@test.com", "currency_code" -> "GBP")
 
       // Delete
       val delete = FakeRequest(DELETE, "/api/v1/customers/lifecycle@test.com")
@@ -138,7 +162,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
       // Create customer
       val createCustomer = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "cascade@test.com"))
+        .withBody(Json.obj("email" -> "cascade@test.com", "currency_code" -> "GBP"))
       status(route(app, createCustomer).get) mustBe CREATED
 
       // Create shopping list for that customer

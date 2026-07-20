@@ -5,6 +5,7 @@ import play.api.mvc.*
 import play.api.libs.json.*
 import services.CustomerService
 import models.Customer
+import models.requests.CustomerCreateRequest
 import auth.AuthenticatedAction
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -45,12 +46,15 @@ class CustomerController @Inject()(
   }
 
   def createCustomer(): Action[JsValue] = authenticated.async(parse.json) { authRequest =>
-    (authRequest.body \ "email").asOpt[String].filter(_.trim.nonEmpty) match {
-      case None => Future.successful { BadRequest(Json.obj("error" -> "Email is required")) }
-      case Some(email) => customerService.createCustomer(email, authRequest.email).map {
-        case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))
-        case Right(customer) => Created(Json.toJson(customer))
+    authRequest.body.validate[CustomerCreateRequest] match {
+      case JsError(errors) => Future.successful {
+        BadRequest(Json.obj("error" -> "Invalid request format", "details" -> JsError.toJson(errors)))
       }
+      case JsSuccess(createRequest, _) =>
+        customerService.createCustomer(createRequest.email, authRequest.email, createRequest.currencyCode).map {
+          case Left(errorMessage) => Conflict(Json.obj("error" -> errorMessage))
+          case Right(customer) => Created(Json.toJson(customer))
+        }
     }
   }
 

@@ -16,8 +16,9 @@ class SlickCustomerRepository @Inject()(
   private class CustomerTable(tag: Tag) extends Table[Customer](tag, "customers") {
     def email = column[String]("email", O.PrimaryKey)
     def userId = column[Long]("user_id")
+    def currencyCode = column[String]("currency_code")
 
-    def * = (email, userId) <> (Customer.apply, c => Some((c.email, c.userId)))
+    def * = (email, userId, currencyCode) <> (Customer.apply, Customer.unapply)
   }
 
   private val customers = TableQuery[CustomerTable]

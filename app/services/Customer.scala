@@ -9,7 +9,7 @@ import scala.concurrent.{ExecutionContext, Future}
 type ErrorMessage = String
 
 trait CustomerService {
-  def createCustomer(email: String, authenticateUserEmail: String): Future[Either[ErrorMessage, Customer]]
+  def createCustomer(email: String, authenticateUserEmail: String, currencyCode: String): Future[Either[ErrorMessage, Customer]]
   def findByEmail(email: String): Future[Either[ErrorMessage, Customer]]
   def deleteCustomer(email: String): Future[Either[ErrorMessage, Unit]]
 }
@@ -19,10 +19,10 @@ class CustomerServiceImpl @Inject()(
     val usersDataRepository: DataRepository[String, User]
 )(implicit ec: ExecutionContext) extends CustomerService {
 
-  override def createCustomer(email: String, authenticateUserEmail: String): Future[Either[ErrorMessage, Customer]] = {
+  override def createCustomer(email: String, authenticateUserEmail: String, currencyCode: String): Future[Either[ErrorMessage, Customer]] = {
     findOrCreateUser(authenticateUserEmail).flatMap {
       case Left(error) => Future.successful(Left(error))
-      case Right(user) => customerDataRepository.create(Customer(email, user.userId.get))
+      case Right(user) => customerDataRepository.create(Customer(email, user.userId.get, currencyCode))
     }
   }
 

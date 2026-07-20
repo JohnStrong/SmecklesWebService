@@ -8,6 +8,7 @@ CREATE TABLE users(
 CREATE TABLE customers (
    email VARCHAR(320) PRIMARY KEY,
    user_id BIGINT NOT NULL,
+   currency_code CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3), -- ISO 4217 (e.g. GBP, EUR, USD)
    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

@@ -25,7 +25,7 @@ class CustomerConcurrencyFunctionalTest extends PlaySpec with AuthenticatedFunct
       val requests = (1 to 10).map { _ =>
         FakeRequest(POST, "/api/v1/customers")
           .withHeaders(authHeader(), "Content-Type" -> "application/json")
-          .withBody(Json.obj("email" -> "race@test.com"))
+          .withBody(Json.obj("email" -> "race@test.com", "currency_code" -> "GBP"))
       }
       val latch = new CountDownLatch(10)
 
@@ -39,13 +39,13 @@ class CustomerConcurrencyFunctionalTest extends PlaySpec with AuthenticatedFunct
 
       val get = FakeRequest(GET, "/api/v1/customers/race@test.com").withHeaders(authHeader())
       status(route(app, get).get) mustBe OK
-      contentAsJson(route(app, get).get) mustBe Json.obj("email" -> "race@test.com")
+      contentAsJson(route(app, get).get) mustBe Json.obj("email" -> "race@test.com", "currency_code" -> "GBP")
     }
 
     "handle 10 concurrent deletes and confirm resource is gone" in {
       val create = FakeRequest(POST, "/api/v1/customers")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "concurrent-delete@test.com"))
+        .withBody(Json.obj("email" -> "concurrent-delete@test.com", "currency_code" -> "GBP"))
       status(route(app, create).get) mustBe CREATED
 
       val requests = (1 to 10).map { _ =>

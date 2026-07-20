@@ -22,7 +22,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
     (controller, mockService)
   }
 
-  private val testCustomer = Customer(email = "test@example.com", userId = 1L)
+  private val testCustomer = Customer(email = "test@example.com", userId = 1L, currencyCode = "GBP")
 
   "getCustomerByEmail" should {
 
@@ -52,15 +52,16 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
     "return 201 with customer JSON on success" in {
       val (controller, mockService) = createFixture()
-      when(mockService.createCustomer("new@example.com", "stub@test.com")).thenReturn(Future.successful(Right(testCustomer)))
+      when(mockService.createCustomer("new@example.com", "stub@test.com", "GBP")).thenReturn(Future.successful(Right(testCustomer)))
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "new@example.com"))
+        .withBody(Json.obj("email" -> "new@example.com", "currency_code" -> "GBP"))
       val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe CREATED
       (contentAsJson(result) \ "email").as[String] shouldBe "test@example.com"
+      (contentAsJson(result) \ "currency_code").as[String] shouldBe "GBP"
     }
 
     "return 400 when email is missing" in {
@@ -68,7 +69,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("name" -> "no email"))
+        .withBody(Json.obj("currency_code" -> "GBP"))
       val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe BAD_REQUEST
@@ -76,12 +77,12 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
     "return 409 when customer already exists" in {
       val (controller, mockService) = createFixture()
-      when(mockService.createCustomer("exists@example.com", "stub@test.com"))
+      when(mockService.createCustomer("exists@example.com", "stub@test.com", "GBP"))
         .thenReturn(Future.successful(Left("Customer with email exists@example.com already exists.")))
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> "exists@example.com"))
+        .withBody(Json.obj("email" -> "exists@example.com", "currency_code" -> "GBP"))
       val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe CONFLICT
@@ -93,7 +94,7 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> ""))
+        .withBody(Json.obj("email" -> "", "currency_code" -> "GBP"))
       val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe BAD_REQUEST
@@ -104,7 +105,40 @@ class CustomerControllerSpec extends AnyWordSpec with Matchers {
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("email" -> JsNull))
+        .withBody(Json.obj("email" -> JsNull, "currency_code" -> "GBP"))
+      val result = controller.createCustomer().apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is missing" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "new@example.com"))
+      val result = controller.createCustomer().apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is too short" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "new@example.com", "currency_code" -> "GB"))
+      val result = controller.createCustomer().apply(request)
+
+      status(result) shouldBe BAD_REQUEST
+    }
+
+    "return 400 when currency_code is too long" in {
+      val (controller, _) = createFixture()
+
+      val request = FakeRequest(POST, "/")
+        .withHeaders("Content-Type" -> "application/json")
+        .withBody(Json.obj("email" -> "new@example.com", "currency_code" -> "GBPP"))
       val result = controller.createCustomer().apply(request)
 
       status(result) shouldBe BAD_REQUEST

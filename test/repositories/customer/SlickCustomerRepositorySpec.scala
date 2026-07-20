@@ -38,7 +38,7 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
   "create" should {
     "persist customer to the datastore and return it" in {
       val userId = insertTestUser()
-      val testCustomer = Customer(email = "test@example.com", userId = userId)
+      val testCustomer = Customer(email = "test@example.com", userId = userId, currencyCode = "GBP")
       val result = repository.create(testCustomer).futureValue
       result.value shouldBe testCustomer
 
@@ -48,7 +48,7 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
 
     "return an error message if customer already exists in the datastore" in {
       val userId = insertTestUser()
-      val testCustomer = Customer(email = "test@example.com", userId = userId)
+      val testCustomer = Customer(email = "test@example.com", userId = userId, currencyCode = "GBP")
       repository.create(testCustomer).futureValue
 
       val result = repository.create(testCustomer).futureValue
@@ -60,7 +60,7 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
   "findByIdentifier" should {
     "return the customer if it exists in the datastore" in {
       val userId = insertTestUser()
-      val testCustomer = Customer(email = "test@example.com", userId = userId)
+      val testCustomer = Customer(email = "test@example.com", userId = userId, currencyCode = "GBP")
       repository.create(testCustomer).futureValue
 
       val result = repository.findByIdentifier(testCustomer.email).futureValue
@@ -78,7 +78,7 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
   "delete" should {
     "delete existing customer and confirm it is no longer in the datastore" in {
       val userId = insertTestUser()
-      val testCustomer = Customer(email = "delete@example.com", userId = userId)
+      val testCustomer = Customer(email = "delete@example.com", userId = userId, currencyCode = "GBP")
       repository.create(testCustomer).futureValue
 
       val result = repository.delete("delete@example.com").futureValue
@@ -89,7 +89,7 @@ class SlickCustomerRepositorySpec extends AnyWordSpec
 
     "return error when customer does not exist and leave datastore unchanged" in {
       val userId = insertTestUser()
-      val existing = Customer(email = "keep@example.com", userId = userId)
+      val existing = Customer(email = "keep@example.com", userId = userId, currencyCode = "GBP")
       repository.create(existing).futureValue
 
       val result = repository.delete("nonexistent@example.com").futureValue

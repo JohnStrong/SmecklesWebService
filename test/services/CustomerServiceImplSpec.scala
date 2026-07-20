@@ -14,7 +14,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
 
   implicit private val ec: ExecutionContext = ExecutionContext.global
 
-  private val testCustomer = Customer(email = "test@example.com", userId = 1L)
+  private val testCustomer = Customer(email = "test@example.com", userId = 1L, currencyCode = "GBP")
   private val testUser = User(userId = Some(1L), email = "auth@user.com")
 
   private def freshService() = {
@@ -30,7 +30,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
       when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Right(testUser)))
       when(mockCustomerRepo.create(any[Customer]())).thenReturn(Future.successful(Right(testCustomer)))
 
-      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+      val result = service.createCustomer("test@example.com", "auth@user.com", "GBP").futureValue
 
       result shouldBe Right(testCustomer)
     }
@@ -42,7 +42,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
       when(mockUserRepo.findByIdentifier("auth@user.com")).thenReturn(Future.successful(Right(testUser)))
       when(mockCustomerRepo.create(any[Customer]())).thenReturn(Future.successful(Right(testCustomer)))
 
-      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+      val result = service.createCustomer("test@example.com", "auth@user.com", "GBP").futureValue
 
       result shouldBe Right(testCustomer)
     }
@@ -53,7 +53,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
       when(mockCustomerRepo.create(any[Customer]()))
         .thenReturn(Future.successful(Left("Customer with email test@example.com already exists.")))
 
-      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+      val result = service.createCustomer("test@example.com", "auth@user.com", "GBP").futureValue
 
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("already exists")
@@ -63,7 +63,7 @@ class CustomerServiceImplSpec extends AnyWordSpec with Matchers with ScalaFuture
       val (service, _, mockUserRepo) = freshService()
       when(mockUserRepo.create(any[User]())).thenReturn(Future.successful(Left("DB connection error")))
 
-      val result = service.createCustomer("test@example.com", "auth@user.com").futureValue
+      val result = service.createCustomer("test@example.com", "auth@user.com", "GBP").futureValue
 
       result shouldBe Left("DB connection error")
     }

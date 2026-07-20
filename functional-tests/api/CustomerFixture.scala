@@ -12,10 +12,10 @@ import play.api.Application
 trait CustomerFixture { self: AuthenticatedFunctionalTest with org.scalatestplus.play.PlaySpec =>
 
   /** Creates a customer and asserts 201. Call at the start of any test that needs a customer. */
-  protected def createCustomer(email: String): Unit = {
+  protected def createCustomer(email: String, currencyCode: String = "GBP"): Unit = {
     val request = FakeRequest(POST, "/api/v1/customers")
       .withHeaders(authHeader(), "Content-Type" -> "application/json")
-      .withBody(Json.obj("email" -> email))
+      .withBody(Json.obj("email" -> email, "currency_code" -> currencyCode))
     status(route(app, request).get) mustBe CREATED
   }
 }

@@ -23,7 +23,7 @@ trait RepositoryTestFixture extends ScalaFutures { self: GuiceOneAppPerTest =>
       sqlu"INSERT INTO users (email) VALUES ('test@user.com')"
         .andThen(sql"SELECT id FROM users WHERE email = 'test@user.com'".as[Long].head)
     ).futureValue
-    customerRepository.create(Customer(email = email, userId = userId)).futureValue
+    customerRepository.create(Customer(email = email, userId = userId, currencyCode = "GBP")).futureValue
     test(userId)
   }
 

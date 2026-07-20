@@ -6,14 +6,15 @@ import play.api.libs.json.*
 
 class CustomerModelSpec extends AnyWordSpec with Matchers {
 
-  private val testCustomer = Customer(email = "test@example.com", userId = 1L)
+  private val testCustomer = Customer(email = "test@example.com", userId = 1L, currencyCode = "GBP")
 
   "Customer JSON serialization" should {
 
-    "serialize to JSON with only email (userId excluded)" in {
+    "serialize to JSON with email and currency_code (userId excluded)" in {
       val json = Json.toJson(testCustomer)
 
       (json \ "email").as[String] shouldBe "test@example.com"
+      (json \ "currency_code").as[String] shouldBe "GBP"
       (json \ "userId").toOption shouldBe None
     }
   }

@@ -99,7 +99,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     }
 
     "allow creating a shopping list with the same name for a different customer" in withCustomer { userId =>
-      customerRepository.create(Customer(email = "other@example.com", userId = userId)).futureValue
+      customerRepository.create(Customer(email = "other@example.com", userId = userId, currencyCode = "GBP")).futureValue
 
       val firstList = shoppingList.copy(email = "test@example.com")
       val secondList = shoppingList.copy(email = "other@example.com")
