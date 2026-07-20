@@ -60,6 +60,9 @@ class CustomerBudgetController @Inject()(
   }
 
   def delete(email: String, periodStart: LocalDate): Action[AnyContent] = authenticated.async { _ =>
-    Future.successful(NotImplemented(Json.obj("error" -> "Delete budget is not yet implemented")))
+    budgetService.delete(email, periodStart).map {
+      case Right(_) => NoContent
+      case Left(msg) => InternalServerError(Json.obj("error" -> msg))
+    }
   }
 }

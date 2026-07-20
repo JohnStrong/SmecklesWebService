@@ -94,7 +94,13 @@ class SlickBudgetRepository @Inject()(
     db.run(action)
   }
 
-  override def delete(email: String, periodStart: LocalDate): Unit = ???
+  override def delete(email: String, periodStart: LocalDate): Future[Either[String, Unit]] = {
+    val action = customerBudgets
+      .filter(cb => cb.email === email && cb.periodStart === periodStart)
+      .delete
+      .map(_ => Right(()))
+    db.run(action)
+  }
 
   private def filterByEmail(email: String) =
     customerBudgets.filter(cb => cb.email === email)

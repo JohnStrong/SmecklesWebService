@@ -232,4 +232,38 @@ class CustomerBudgetControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
   }
+
+  "delete" should {
+
+    "return 204 on successful deletion" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.delete("user@example.com", LocalDate.of(2026, 7, 1)))
+        .thenReturn(Future.successful(Right(())))
+
+      val result = controller.delete("user@example.com", LocalDate.of(2026, 7, 1)).apply(FakeRequest())
+
+      status(result) shouldBe NO_CONTENT
+    }
+
+    "return 204 when budget does not exist (idempotent)" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.delete("user@example.com", LocalDate.of(2026, 9, 1)))
+        .thenReturn(Future.successful(Right(())))
+
+      val result = controller.delete("user@example.com", LocalDate.of(2026, 9, 1)).apply(FakeRequest())
+
+      status(result) shouldBe NO_CONTENT
+    }
+
+    "return 500 when service returns Left" in {
+      val (controller, mockService) = createFixture()
+      when(mockService.delete("user@example.com", LocalDate.of(2026, 7, 1)))
+        .thenReturn(Future.successful(Left("Database error")))
+
+      val result = controller.delete("user@example.com", LocalDate.of(2026, 7, 1)).apply(FakeRequest())
+
+      status(result) shouldBe INTERNAL_SERVER_ERROR
+      (contentAsJson(result) \ "error").as[String] should include("Database error")
+    }
+  }
 }

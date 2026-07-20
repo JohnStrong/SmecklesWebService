@@ -127,4 +127,37 @@ class BudgetServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures 
       result.getMessage shouldBe "Connection reset"
     }
   }
+
+  "delete" should {
+
+    "return Right(()) on successful deletion" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.delete("user@example.com", LocalDate.of(2026, 7, 1)))
+        .thenReturn(Future.successful(Right(())))
+
+      val result = service.delete("user@example.com", LocalDate.of(2026, 7, 1)).futureValue
+
+      result shouldBe Right(())
+    }
+
+    "return Right(()) when budget does not exist (idempotent)" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.delete("user@example.com", LocalDate.of(2026, 9, 1)))
+        .thenReturn(Future.successful(Right(())))
+
+      val result = service.delete("user@example.com", LocalDate.of(2026, 9, 1)).futureValue
+
+      result shouldBe Right(())
+    }
+
+    "propagate failure when repo throws" in {
+      val (service, mockRepo) = freshService()
+      when(mockRepo.delete("user@example.com", LocalDate.of(2026, 7, 1)))
+        .thenReturn(Future.failed(new RuntimeException("Connection reset")))
+
+      val result = service.delete("user@example.com", LocalDate.of(2026, 7, 1)).failed.futureValue
+
+      result.getMessage shouldBe "Connection reset"
+    }
+  }
 }

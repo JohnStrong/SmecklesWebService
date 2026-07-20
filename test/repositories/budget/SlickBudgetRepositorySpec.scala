@@ -224,4 +224,51 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
       result.left.value should include("No budget found")
     }
   }
+
+  "delete" should {
+
+    "remove an existing budget" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val result = repository.delete(julyBudget.email, julyBudget.periodStart).futureValue
+
+      result.value shouldBe (())
+
+      // Verify it's gone
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value shouldBe empty
+    }
+
+    "return Right(()) when budget does not exist (idempotent)" in withCustomer {
+      val result = repository.delete(julyBudget.email, LocalDate.of(2026, 9, 1)).futureValue
+
+      result.value shouldBe (())
+    }
+
+    "not delete budgets for other periods" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val augustBudget = julyBudget.copy(
+        periodStart = LocalDate.of(2026, 8, 1),
+        periodEnd = LocalDate.of(2026, 9, 1)
+      )
+      repository.create(augustBudget).futureValue
+
+      repository.delete(julyBudget.email, julyBudget.periodStart).futureValue
+
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value should have length 1
+      stored.value.head.periodStart shouldBe LocalDate.of(2026, 8, 1)
+    }
+
+    "not delete budgets for other customers" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      // Try to delete with a different email
+      repository.delete("other@example.com", julyBudget.periodStart).futureValue
+
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value should have length 1
+    }
+  }
 }
