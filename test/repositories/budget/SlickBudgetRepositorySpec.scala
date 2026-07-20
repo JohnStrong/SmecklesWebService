@@ -41,8 +41,12 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
 
     "insert a budget when no other budgets exist for the customer" in withCustomer {
       val result = repository.create(julyBudget).futureValue
-
       result.value shouldBe julyBudget
+
+      // Verify persisted via get
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value should have length 1
+      stored.value.head shouldBe julyBudget
     }
 
     "allow adjacent budgets (end of one equals start of next)" in withCustomer {
@@ -167,6 +171,57 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
       val result = repository.get("other@example.com").futureValue
 
       result.value shouldBe empty
+    }
+  }
+
+  "update" should {
+
+    "update amount_minor and currency_code of an existing budget" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val result = repository.update(julyBudget.email, julyBudget.periodStart, 250000L, "GBP").futureValue
+      result.value.amountMinor shouldBe 250000L
+      result.value.currencyCode shouldBe "GBP"
+
+      // Verify persisted via get
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value.head.amountMinor shouldBe 250000L
+      stored.value.head.currencyCode shouldBe "GBP"
+    }
+
+    "update currency_code while keeping the same amount" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      repository.update(julyBudget.email, julyBudget.periodStart, julyBudget.amountMinor, "EUR").futureValue
+
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value.head.currencyCode shouldBe "EUR"
+      stored.value.head.amountMinor shouldBe julyBudget.amountMinor
+    }
+
+    "not change period_start or period_end" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      repository.update(julyBudget.email, julyBudget.periodStart, 999999L, "EUR").futureValue
+
+      val stored = repository.get(julyBudget.email).futureValue
+      stored.value.head.periodStart shouldBe LocalDate.of(2026, 7, 1)
+      stored.value.head.periodEnd shouldBe LocalDate.of(2026, 8, 1)
+    }
+
+    "return Left when no budget exists for the given period_start" in withCustomer {
+      val result = repository.update(julyBudget.email, LocalDate.of(2026, 9, 1), 100000L, "GBP").futureValue
+
+      result.left.value should include("No budget found")
+      result.left.value should include("2026-09-01")
+    }
+
+    "return Left when email does not match" in withCustomer {
+      repository.create(julyBudget).futureValue
+
+      val result = repository.update("other@example.com", julyBudget.periodStart, 100000L, "GBP").futureValue
+
+      result.left.value should include("No budget found")
     }
   }
 }

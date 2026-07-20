@@ -75,12 +75,32 @@ class SlickBudgetRepository @Inject()(
     db.run(action)
   }
 
-  override def update(budget: Budget): Future[Either[String, Budget]] = ???
+  override def update(email: String, periodStart: LocalDate, amountMinor: Long, currencyCode: String): Future[Either[String, Budget]] = {
+    val action = (for {
+      existing <- filterByEmailAndPeriodStart(email, periodStart)
+        .forUpdate
+        .result
+        .headOption
+      result <- existing match {
+        case Some(row) =>
+          for {
+            _ <- updateExistingBudget(amountMinor, currencyCode, row)
+          } yield Right(Budget(row.email, row.periodStart, row.periodEnd, amountMinor, currencyCode))
+        case None =>
+          DBIO.successful(Left(s"No budget found for period starting $periodStart"))
+      }
+    } yield result).transactionally
+
+    db.run(action)
+  }
 
   override def delete(email: String, periodStart: LocalDate): Unit = ???
 
   private def filterByEmail(email: String) =
     customerBudgets.filter(cb => cb.email === email)
+
+  private def filterByEmailAndPeriodStart(email: String, periodStart: LocalDate) =
+    customerBudgets.filter(cb => cb.email === email && cb.periodStart === periodStart)
 
   private def filterByEmailAndRange(email: String, periodStart: LocalDate, periodEnd: LocalDate) =
     customerBudgets.filter(cb =>
@@ -96,4 +116,10 @@ class SlickBudgetRepository @Inject()(
     budget.amountMinor,
     budget.currencyCode
   )
+
+  private def updateExistingBudget(amountMinor: Long, currencyCode: String, row: CustomerBudgetRow) =
+    customerBudgets
+      .filter(_.id === row.id)
+      .map(b => (b.amountMinor, b.currencyCode))
+      .update((amountMinor, currencyCode))
 }
