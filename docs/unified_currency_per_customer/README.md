@@ -1,5 +1,7 @@
 # Unified Currency Per Customer — Migration Plan
 
+> ✅ **MIGRATION COMPLETE** — All phases implemented and verified (2026-07-24). `currency_code` exists only on the `customers` table. All other tables and API endpoints work purely with minor unit amounts.
+
 ## Summary
 
 Introduce a single `currency_code` on the `customers` table, set once at customer creation. All monetary records (budgets, shopping list items, expenses) inherit the customer's currency — removing `currency_code` from individual request bodies and eliminating currency mismatch issues.
