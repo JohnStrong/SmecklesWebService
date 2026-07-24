@@ -10,7 +10,7 @@ import scala.concurrent.Future
 trait BudgetService {
   def getBudgets(email: String): Future[Either[String, List[Budget]]]
   def create(budget: Budget): Future[Either[String, Budget]]
-  def update(email: String, periodStart: LocalDate, amountMinor: Long, currencyCode: String): Future[Either[String, Budget]]
+  def update(email: String, periodStart: LocalDate, amountMinor: Long): Future[Either[String, Budget]]
   def delete(email: String, periodStart: LocalDate): Future[Either[String, Unit]]
 }
 
@@ -26,8 +26,8 @@ class BudgetServiceImpl @Inject()(
     budgetRepository.create(budget)
   }
 
-  override def update(email: String, periodStart: LocalDate, amountMinor: Long, currencyCode: String): Future[Either[String, Budget]] = {
-    budgetRepository.update(email, periodStart, amountMinor, currencyCode)
+  override def update(email: String, periodStart: LocalDate, amountMinor: Long): Future[Either[String, Budget]] = {
+    budgetRepository.update(email, periodStart, amountMinor)
   }
 
   override def delete(email: String, periodStart: LocalDate): Future[Either[String, Unit]] = {

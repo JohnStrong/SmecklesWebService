@@ -13,8 +13,7 @@ case class CustomerBudgetRow(
     email: String,
     periodStart: LocalDate,
     periodEnd: LocalDate,
-    amountMinor: Long,
-    currencyCode: String
+    amountMinor: Long
 )
 
 object CustomerBudgetRow {
@@ -23,8 +22,7 @@ object CustomerBudgetRow {
       email = customerBudgetRow.email,
       periodStart = customerBudgetRow.periodStart,
       periodEnd = customerBudgetRow.periodEnd,
-      amountMinor = customerBudgetRow.amountMinor,
-      currencyCode = customerBudgetRow.currencyCode
+      amountMinor = customerBudgetRow.amountMinor
     )
   }
 }
@@ -43,9 +41,8 @@ class SlickBudgetRepository @Inject()(
     def periodStart = column[LocalDate]("period_start")
     def periodEnd = column[LocalDate]("period_end")
     def amountMinor = column[Long]("amount_minor")
-    def currencyCode = column[String]("currency_code")
 
-    def *  = (id, email, periodStart, periodEnd, amountMinor, currencyCode) <> (CustomerBudgetRow.apply, CustomerBudgetRow.unapply)
+    def *  = (id, email, periodStart, periodEnd, amountMinor) <> (CustomerBudgetRow.apply, CustomerBudgetRow.unapply)
   }
   private val customerBudgets = TableQuery[CustomerBudgetsTable]
 
@@ -75,7 +72,7 @@ class SlickBudgetRepository @Inject()(
     db.run(action)
   }
 
-  override def update(email: String, periodStart: LocalDate, amountMinor: Long, currencyCode: String): Future[Either[String, Budget]] = {
+  override def update(email: String, periodStart: LocalDate, amountMinor: Long): Future[Either[String, Budget]] = {
     val action = (for {
       existing <- filterByEmailAndPeriodStart(email, periodStart)
         .forUpdate
@@ -84,8 +81,8 @@ class SlickBudgetRepository @Inject()(
       result <- existing match {
         case Some(row) =>
           for {
-            _ <- updateExistingBudget(amountMinor, currencyCode, row)
-          } yield Right(Budget(row.email, row.periodStart, row.periodEnd, amountMinor, currencyCode))
+            _ <- updateExistingBudget(amountMinor, row)
+          } yield Right(Budget(row.email, row.periodStart, row.periodEnd, amountMinor))
         case None =>
           DBIO.successful(Left(s"No budget found for period starting $periodStart"))
       }
@@ -119,13 +116,12 @@ class SlickBudgetRepository @Inject()(
     budget.email,
     budget.periodStart,
     budget.periodEnd,
-    budget.amountMinor,
-    budget.currencyCode
+    budget.amountMinor
   )
 
-  private def updateExistingBudget(amountMinor: Long, currencyCode: String, row: CustomerBudgetRow) =
+  private def updateExistingBudget(amountMinor: Long, row: CustomerBudgetRow) =
     customerBudgets
       .filter(_.id === row.id)
-      .map(b => (b.amountMinor, b.currencyCode))
-      .update((amountMinor, currencyCode))
+      .map(b => (b.amountMinor))
+      .update((amountMinor))
 }

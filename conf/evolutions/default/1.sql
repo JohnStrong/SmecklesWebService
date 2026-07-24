@@ -18,7 +18,6 @@ CREATE TABLE customer_budgets (
   period_start   DATE NOT NULL,              -- start of budget window (e.g. 2026-07-01 or 2026-07-07)
   period_end     DATE NOT NULL,              -- end of budget window (exclusive, e.g. 2026-08-01 or 2026-07-14)
   amount_minor   BIGINT NOT NULL,            -- total budget in minor currency units (1,234.56 → 123456)
-  currency_code  CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),   -- ISO 4217 (e.g. GBP, EUR, USD)
   UNIQUE(email, period_start),
   FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );

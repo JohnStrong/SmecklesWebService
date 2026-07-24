@@ -31,8 +31,7 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
     email = "test@example.com",
     periodStart = LocalDate.of(2026, 7, 1),
     periodEnd = LocalDate.of(2026, 8, 1),
-    amountMinor = 200000L,
-    currencyCode = "GBP"
+    amountMinor = 200000L
   )
 
   private def withCustomer(test: => Any): Unit = withCustomer(julyBudget.email)(test)
@@ -176,33 +175,21 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
 
   "update" should {
 
-    "update amount_minor and currency_code of an existing budget" in withCustomer {
+    "update amount_minor of an existing budget" in withCustomer {
       repository.create(julyBudget).futureValue
 
-      val result = repository.update(julyBudget.email, julyBudget.periodStart, 250000L, "GBP").futureValue
+      val result = repository.update(julyBudget.email, julyBudget.periodStart, 250000L).futureValue
       result.value.amountMinor shouldBe 250000L
-      result.value.currencyCode shouldBe "GBP"
 
       // Verify persisted via get
       val stored = repository.get(julyBudget.email).futureValue
       stored.value.head.amountMinor shouldBe 250000L
-      stored.value.head.currencyCode shouldBe "GBP"
-    }
-
-    "update currency_code while keeping the same amount" in withCustomer {
-      repository.create(julyBudget).futureValue
-
-      repository.update(julyBudget.email, julyBudget.periodStart, julyBudget.amountMinor, "EUR").futureValue
-
-      val stored = repository.get(julyBudget.email).futureValue
-      stored.value.head.currencyCode shouldBe "EUR"
-      stored.value.head.amountMinor shouldBe julyBudget.amountMinor
     }
 
     "not change period_start or period_end" in withCustomer {
       repository.create(julyBudget).futureValue
 
-      repository.update(julyBudget.email, julyBudget.periodStart, 999999L, "EUR").futureValue
+      repository.update(julyBudget.email, julyBudget.periodStart, 999999L).futureValue
 
       val stored = repository.get(julyBudget.email).futureValue
       stored.value.head.periodStart shouldBe LocalDate.of(2026, 7, 1)
@@ -210,7 +197,7 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
     }
 
     "return Left when no budget exists for the given period_start" in withCustomer {
-      val result = repository.update(julyBudget.email, LocalDate.of(2026, 9, 1), 100000L, "GBP").futureValue
+      val result = repository.update(julyBudget.email, LocalDate.of(2026, 9, 1), 100000L).futureValue
 
       result.left.value should include("No budget found")
       result.left.value should include("2026-09-01")
@@ -219,7 +206,7 @@ class SlickBudgetRepositorySpec extends AnyWordSpec
     "return Left when email does not match" in withCustomer {
       repository.create(julyBudget).futureValue
 
-      val result = repository.update("other@example.com", julyBudget.periodStart, 100000L, "GBP").futureValue
+      val result = repository.update("other@example.com", julyBudget.periodStart, 100000L).futureValue
 
       result.left.value should include("No budget found")
     }

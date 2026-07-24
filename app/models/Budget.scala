@@ -8,8 +8,7 @@ case class Budget(
    email: String,
    periodStart: LocalDate,
    periodEnd: LocalDate,
-   amountMinor: Long,
-   currencyCode: String
+   amountMinor: Long
 )
 
 object Budget {
@@ -17,7 +16,6 @@ object Budget {
     (__ \ "email").write[String] and
     (__ \ "period_start").write[LocalDate] and
     (__ \ "period_end").write[LocalDate] and
-    (__ \ "amount_minor").write[Long] and
-    (__ \ "currency_code").write[String]
-  )(b => (b.email, b.periodStart, b.periodEnd, b.amountMinor, b.currencyCode))
+    (__ \ "amount_minor").write[Long]
+  )(b => (b.email, b.periodStart, b.periodEnd, b.amountMinor))
 }

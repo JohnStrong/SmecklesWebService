@@ -9,13 +9,11 @@ class CustomerBudgetCreateRequestSpec extends AnyWordSpec with Matchers {
   private def validBody(
     periodStart: JsValue = JsString("2026-07-01"),
     periodEnd: JsValue = JsString("2026-08-01"),
-    amountMinor: JsValue = JsNumber(200000),
-    currencyCode: JsValue = JsString("GBP")
+    amountMinor: JsValue = JsNumber(200000)
   ) = Json.obj(
     "period_start" -> periodStart,
     "period_end" -> periodEnd,
-    "amount_minor" -> amountMinor,
-    "currency_code" -> currencyCode
+    "amount_minor" -> amountMinor
   )
 
   "CustomerBudgetCreateRequest" should {
@@ -27,7 +25,6 @@ class CustomerBudgetCreateRequestSpec extends AnyWordSpec with Matchers {
       req.periodStart.toString shouldBe "2026-07-01"
       req.periodEnd.toString shouldBe "2026-08-01"
       req.amountMinor shouldBe 200000L
-      req.currencyCode shouldBe "GBP"
     }
 
     "accept a weekly budget period" in {
@@ -56,23 +53,8 @@ class CustomerBudgetCreateRequestSpec extends AnyWordSpec with Matchers {
       json.validate[CustomerBudgetCreateRequest] shouldBe a[JsError]
     }
 
-    "fail when currency_code is missing" in {
-      val json = validBody().as[JsObject] - "currency_code"
-      json.validate[CustomerBudgetCreateRequest] shouldBe a[JsError]
-    }
-
     "fail when amount_minor is negative" in {
       val result = validBody(amountMinor = JsNumber(-1)).validate[CustomerBudgetCreateRequest]
-      result shouldBe a[JsError]
-    }
-
-    "fail when currency_code is too short" in {
-      val result = validBody(currencyCode = JsString("GB")).validate[CustomerBudgetCreateRequest]
-      result shouldBe a[JsError]
-    }
-
-    "fail when currency_code is too long" in {
-      val result = validBody(currencyCode = JsString("GBPP")).validate[CustomerBudgetCreateRequest]
       result shouldBe a[JsError]
     }
 

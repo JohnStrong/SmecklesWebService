@@ -10,13 +10,11 @@ class CustomerBudgetFunctionalTest extends PlaySpec with AuthenticatedFunctional
   private def validBudgetBody(
     periodStart: String = "2026-07-01",
     periodEnd: String = "2026-08-01",
-    amountMinor: Long = 200000L,
-    currencyCode: String = "GBP"
+    amountMinor: Long = 200000L
   ) = Json.obj(
     "period_start" -> periodStart,
     "period_end" -> periodEnd,
-    "amount_minor" -> amountMinor,
-    "currency_code" -> currencyCode
+    "amount_minor" -> amountMinor
   )
 
   "CustomerBudgetController" should {
@@ -38,7 +36,7 @@ class CustomerBudgetFunctionalTest extends PlaySpec with AuthenticatedFunctional
     "return 401 when PUT has no Authorization header" in {
       val request = FakeRequest(PUT, "/api/v1/customers/test@example.com/budgets/2026-07-01")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(Json.obj("amount_minor" -> 250000, "currency_code" -> "GBP"))
+        .withBody(Json.obj("amount_minor" -> 250000))
       status(route(app, request).get) mustBe UNAUTHORIZED
     }
 
@@ -71,7 +69,6 @@ class CustomerBudgetFunctionalTest extends PlaySpec with AuthenticatedFunctional
       (json \ "period_start").as[String] mustBe "2026-07-01"
       (json \ "period_end").as[String] mustBe "2026-08-01"
       (json \ "amount_minor").as[Long] mustBe 200000L
-      (json \ "currency_code").as[String] mustBe "GBP"
     }
 
     "return 409 when budget period overlaps with an existing budget" in {
@@ -109,17 +106,6 @@ class CustomerBudgetFunctionalTest extends PlaySpec with AuthenticatedFunctional
       val request = FakeRequest(POST, "/api/v1/customers/budget-missing@test.com/budgets")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
         .withBody(Json.obj("bad" -> "data"))
-      val result = route(app, request).get
-
-      status(result) mustBe BAD_REQUEST
-    }
-
-    "return 400 when currency_code is not exactly 3 characters" in {
-      createCustomer("budget-currency@test.com")
-
-      val request = FakeRequest(POST, "/api/v1/customers/budget-currency@test.com/budgets")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(validBudgetBody(currencyCode = "GB"))
       val result = route(app, request).get
 
       status(result) mustBe BAD_REQUEST
@@ -168,7 +154,7 @@ class CustomerBudgetFunctionalTest extends PlaySpec with AuthenticatedFunctional
 
       val updateRequest = FakeRequest(PUT, "/api/v1/customers/budget-update@test.com/budgets/2026-07-01")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("amount_minor" -> 250000, "currency_code" -> "GBP"))
+        .withBody(Json.obj("amount_minor" -> 250000))
       val result = route(app, updateRequest).get
 
       status(result) mustBe OK
@@ -180,7 +166,7 @@ class CustomerBudgetFunctionalTest extends PlaySpec with AuthenticatedFunctional
 
       val request = FakeRequest(PUT, "/api/v1/customers/budget-notfound@test.com/budgets/2026-07-01")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(Json.obj("amount_minor" -> 250000, "currency_code" -> "GBP"))
+        .withBody(Json.obj("amount_minor" -> 250000))
       val result = route(app, request).get
 
       status(result) mustBe NOT_FOUND

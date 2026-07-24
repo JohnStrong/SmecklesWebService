@@ -34,8 +34,7 @@ class CustomerBudgetController @Inject()(
           email = email,
           periodStart = createRequest.periodStart,
           periodEnd = createRequest.periodEnd,
-          amountMinor = createRequest.amountMinor,
-          currencyCode = createRequest.currencyCode
+          amountMinor = createRequest.amountMinor
         )
         budgetService.create(budget).map {
           case Right(created) => Created(Json.toJson(created))
@@ -51,7 +50,7 @@ class CustomerBudgetController @Inject()(
         BadRequest(Json.obj("error" -> "Invalid request format", "details" -> JsError.toJson(errors)))
       }
       case JsSuccess(updateRequest, _) =>
-        budgetService.update(email, periodStart, updateRequest.amountMinor, updateRequest.currencyCode).map {
+        budgetService.update(email, periodStart, updateRequest.amountMinor).map {
           case Right(budget) => Ok(Json.toJson(budget))
           case Left(msg) if msg.contains("No budget found") => NotFound(Json.obj("error" -> msg))
           case Left(msg) => InternalServerError(Json.obj("error" -> msg))

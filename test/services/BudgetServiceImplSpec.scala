@@ -17,8 +17,7 @@ class BudgetServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures 
     email = "user@example.com",
     periodStart = LocalDate.of(2026, 7, 1),
     periodEnd = LocalDate.of(2026, 8, 1),
-    amountMinor = 200000L,
-    currencyCode = "GBP"
+    amountMinor = 200000L
   )
 
   private def freshService() = {
@@ -98,20 +97,20 @@ class BudgetServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures 
     "return Right with updated budget on success" in {
       val (service, mockRepo) = freshService()
       val updated = testBudget.copy(amountMinor = 250000L)
-      when(mockRepo.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP"))
+      when(mockRepo.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L))
         .thenReturn(Future.successful(Right(updated)))
 
-      val result = service.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP").futureValue
+      val result = service.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L).futureValue
 
       result shouldBe Right(updated)
     }
 
     "return Left when budget not found" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.update("user@example.com", LocalDate.of(2026, 9, 1), 100000L, "GBP"))
+      when(mockRepo.update("user@example.com", LocalDate.of(2026, 9, 1), 100000L))
         .thenReturn(Future.successful(Left("No budget found for period starting 2026-09-01")))
 
-      val result = service.update("user@example.com", LocalDate.of(2026, 9, 1), 100000L, "GBP").futureValue
+      val result = service.update("user@example.com", LocalDate.of(2026, 9, 1), 100000L).futureValue
 
       result shouldBe a[Left[_, _]]
       result.left.toOption.get should include("No budget found")
@@ -119,10 +118,10 @@ class BudgetServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures 
 
     "propagate failure when repo throws" in {
       val (service, mockRepo) = freshService()
-      when(mockRepo.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP"))
+      when(mockRepo.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L))
         .thenReturn(Future.failed(new RuntimeException("Connection reset")))
 
-      val result = service.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L, "GBP").failed.futureValue
+      val result = service.update("user@example.com", LocalDate.of(2026, 7, 1), 250000L).failed.futureValue
 
       result.getMessage shouldBe "Connection reset"
     }
