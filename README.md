@@ -482,7 +482,7 @@ The unified expense ledger. Each row represents a realised cost — money that h
 | `amount_minor` | BIGINT | NOT NULL | Cost in minor currency units |
 | `source_type` | VARCHAR(30) | NOT NULL | Origin: 'shopping_list_item', 'subscription', 'bill', 'one_off' |
 | `source_id` | BIGINT | NOT NULL | FK to the originating record in the source table |
-| `created_at` | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | When the expense was recorded |
+| `created_at` | BIGINT | NOT NULL | Epoch milliseconds UTC — when the expense was recorded |
 
 Composite unique constraint: `UNIQUE(source_type, source_id)` — prevents duplicate entries from the same source record.
 

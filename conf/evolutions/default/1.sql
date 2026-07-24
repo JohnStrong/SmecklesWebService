@@ -55,7 +55,7 @@ CREATE TABLE expenses (
       amount_minor       BIGINT NOT NULL,        -- cost in minor currency units
       source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off'
       source_id          BIGINT NOT NULL,         -- FK to the originating record in the source table
-      created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at         BIGINT NOT NULL,            -- epoch milliseconds UTC
       UNIQUE(source_type, source_id),
       FOREIGN KEY (email) REFERENCES customers(email) ON DELETE CASCADE
 );
