@@ -226,20 +226,20 @@ curl -H "Authorization: Bearer $TOKEN" "$SERVICE_URL/api/v1/customers/hello@exam
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/budgets" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000,"currency_code":"GBP"}'
-# → 201 {"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000,"currency_code":"GBP"}
+  -d '{"period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000}'
+# → 201 {"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000}
 
 # 7. Get customer budgets
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/budgets"
-# → 200 [{"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000,"currency_code":"GBP"}]
+# → 200 [{"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":200000}]
 
 # 8. Update customer budget
 curl -X PUT "$SERVICE_URL/api/v1/customers/hello@example.com/budgets/2026-07-01" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"amount_minor":250000,"currency_code":"GBP"}'
-# → 200 {"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":250000,"currency_code":"GBP"}
+  -d '{"amount_minor":250000}'
+# → 200 {"email":"hello@example.com","period_start":"2026-07-01","period_end":"2026-08-01","amount_minor":250000}
 
 # 9. Delete customer budget
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
@@ -255,27 +255,27 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X POST "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100}]}'
-# → 201 {"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}
+  -d '{"name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"unit_amount_minor":129},{"name":"Bread","quantity":1,"unit_amount_minor":100}]}'
+# → 201 {"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}
 
 # 12. Get shopping lists
 curl -H "Authorization: Bearer $TOKEN" \
   "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists"
-# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"currency_code":"GBP","unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}]
+# → 200 [{"email":"hello@example.com","name":"Weekly Groceries","period_start":"2026-07-01","day_date":"2026-07-05","items":[{"name":"Milk","quantity":2,"unit_amount_minor":129,"line_amount_minor":258,"status":"pending"},{"name":"Bread","quantity":1,"unit_amount_minor":100,"line_amount_minor":100,"status":"pending"}]}]
 
 # 13. Mark item as completed
 curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":"completed"}'
-# → 200 {"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"completed"}
+# → 200 {"name":"Milk","quantity":2,"unit_amount_minor":129,"line_amount_minor":258,"status":"completed"}
 
 # 14. Revert item back to pending
 curl -X PATCH "$SERVICE_URL/api/v1/customers/hello@example.com/shopping-lists/Weekly%20Groceries/items/Milk" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":"pending"}'
-# → 200 {"name":"Milk","quantity":2,"currency_code":"GBP","unit_amount_minor":129,"line_amount_minor":258,"status":"pending"}
+# → 200 {"name":"Milk","quantity":2,"unit_amount_minor":129,"line_amount_minor":258,"status":"pending"}
 
 # 15. Delete shopping list
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
@@ -435,7 +435,6 @@ The spending budget for a customer over a defined period. Supports any period le
 | `period_start` | DATE | NOT NULL | Start of budget window (e.g. 2026-07-01) |
 | `period_end` | DATE | NOT NULL | End of budget window, exclusive (e.g. 2026-08-01) |
 | `amount_minor` | BIGINT | NOT NULL | Total budget in minor currency units (e.g. £2,000 → 200000) |
-| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code (e.g. GBP, USD, EUR) |
 
 Composite unique constraint: `UNIQUE(email, period_start)` — one budget per customer per period start date. Budget periods for the same customer must not overlap (enforced at service layer).
 
@@ -463,7 +462,6 @@ An item within a shopping list. Monetary amounts are stored in minor currency un
 | `shopping_list_id` | BIGINT | NOT NULL, FK → `shopping_lists.id` ON DELETE CASCADE | Parent list |
 | `name` | VARCHAR(100) | NOT NULL | Human-readable item label (e.g. "Milk", "Bread") |
 | `quantity` | INT | NOT NULL | Must be ≥ 1 |
-| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code (e.g. GBP, USD, EUR) |
 | `unit_amount_minor` | BIGINT | NOT NULL | Price per unit in minor currency units (e.g. £1.29 → 129) |
 | `line_amount_minor` | BIGINT | NOT NULL | Line total: `quantity × unit_amount_minor` |
 | `status` | VARCHAR(20) | NOT NULL, DEFAULT 'pending' | Item completion status: `pending` or `completed` |
@@ -482,7 +480,6 @@ The unified expense ledger. Each row represents a realised cost — money that h
 | `category` | VARCHAR(50) | NOT NULL | e.g. 'groceries', 'subscriptions', 'bills', 'one-off' |
 | `description` | VARCHAR(100) | nullable | Human-readable label (e.g. "Milk x2", "Netflix") |
 | `amount_minor` | BIGINT | NOT NULL | Cost in minor currency units |
-| `currency_code` | CHAR(3) | NOT NULL, CHECK length = 3 | ISO 4217 currency code |
 | `source_type` | VARCHAR(30) | NOT NULL | Origin: 'shopping_list_item', 'subscription', 'bill', 'one_off' |
 | `source_id` | BIGINT | NOT NULL | FK to the originating record in the source table |
 | `created_at` | TIMESTAMP | NOT NULL, DEFAULT CURRENT_TIMESTAMP | When the expense was recorded |
@@ -566,7 +563,7 @@ Returns all budgets for a customer.
 
 | Status | Response |
 |--------|----------|
-| 200 | `[{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 200000, "currency_code": "GBP"}]` |
+| 200 | `[{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 200000}]` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
 
@@ -579,8 +576,7 @@ Content-Type: application/json
 {
   "period_start": "2026-07-01",
   "period_end": "2026-08-01",
-  "amount_minor": 200000,
-  "currency_code": "GBP"
+  "amount_minor": 200000
 }
 ```
 
@@ -590,12 +586,11 @@ Validation rules:
 - `period_start` — required
 - `period_end` — required, must be after `period_start`
 - `amount_minor` — required, must be ≥ 0
-- `currency_code` — required, must be exactly 3 characters (ISO 4217)
 - No overlapping periods for the same customer
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 200000, "currency_code": "GBP"}` |
+| 201 | `{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 200000}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
@@ -607,14 +602,14 @@ Validation rules:
 PUT /api/v1/customers/:email/budgets/:period_start
 Content-Type: application/json
 
-{"amount_minor": 250000, "currency_code": "GBP"}
+{"amount_minor": 250000}
 ```
 
-Replaces the amount and currency of an existing budget. Uses PUT (not PATCH) because the request is idempotent and always provides the complete set of mutable fields. Period dates are immutable — delete and recreate to change the period.
+Replaces the amount of an existing budget. Uses PUT (not PATCH) because the request is idempotent and always provides the complete set of mutable fields. Period dates are immutable — delete and recreate to change the period.
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 250000, "currency_code": "GBP"}` |
+| 200 | `{"email": "user@example.com", "period_start": "2026-07-01", "period_end": "2026-08-01", "amount_minor": 250000}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
@@ -648,8 +643,8 @@ Content-Type: application/json
   "period_start": "2026-07-01",
   "day_date": "2026-07-05",
   "items": [
-    {"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129},
-    {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100}
+    {"name": "Milk", "quantity": 2, "unit_amount_minor": 129},
+    {"name": "Bread", "quantity": 1, "unit_amount_minor": 100}
   ]
 }
 ```
@@ -659,15 +654,15 @@ Validation rules:
 - `period_start` — required, must be the 1st of the month (e.g. `2026-07-01`)
 - `day_date` — required, must be within the same month as `period_start`
 - `items` — required, must contain at least one item (max 50)
+- Each item `name` — required, cannot be empty
 - Each item `quantity` — required, must be at least 1
-- Each item `currency_code` — required, must be exactly 3 characters (ISO 4217)
 - Each item `unit_amount_minor` — required, must be ≥ 0 (price per unit in minor currency units)
 
 `line_amount_minor` is computed server-side as `quantity × unit_amount_minor` and returned in responses.
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "period_start": "2026-07-01", "day_date": "2026-07-05", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}` |
+| 201 | `{"email": "user@example.com", "name": "Weekly Groceries", "period_start": "2026-07-01", "day_date": "2026-07-05", "items": [{"name": "Milk", "quantity": 2, "unit_amount_minor": 129, "line_amount_minor": 258, "status": "pending"}, {"name": "Bread", "quantity": 1, "unit_amount_minor": 100, "line_amount_minor": 100, "status": "pending"}]}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure with field-level errors |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
@@ -681,7 +676,7 @@ GET /api/v1/customers/:email/shopping-lists
 
 | Status | Response |
 |--------|----------|
-| 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "period_start": "2026-07-01", "day_date": "2026-07-05", "items": [{"quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258}, {"quantity": 1, "currency_code": "GBP", "unit_amount_minor": 100, "line_amount_minor": 100}]}]` |
+| 200 | `[{"email": "user@example.com", "name": "Weekly Groceries", "period_start": "2026-07-01", "day_date": "2026-07-05", "items": [{"name": "Milk", "quantity": 2, "unit_amount_minor": 129, "line_amount_minor": 258, "status": "pending"}, {"name": "Bread", "quantity": 1, "unit_amount_minor": 100, "line_amount_minor": 100, "status": "pending"}]}]` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
 | 500 | `{"error": "..."}` — unexpected server error |
@@ -723,7 +718,7 @@ Valid status values: `pending`, `completed`.
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"name": "Milk", "quantity": 2, "currency_code": "GBP", "unit_amount_minor": 129, "line_amount_minor": 258, "status": "completed"}` |
+| 200 | `{"name": "Milk", "quantity": 2, "unit_amount_minor": 129, "line_amount_minor": 258, "status": "completed"}` |
 | 400 | `{"error": "Invalid status value"}` — status is not `pending` or `completed` |
 | 401 | `{"error": "Missing or malformed Authorization header"}` — no or invalid Bearer token |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` — valid token but email not in allowlist |
@@ -737,14 +732,14 @@ The operation is idempotent — setting an item to its current status returns 20
 POST /api/v1/customers/:email/shopping-lists/:name/items
 Content-Type: application/json
 
-{"name": "Eggs", "quantity": 6, "currency_code": "GBP", "unit_amount_minor": 200}
+{"name": "Eggs", "quantity": 6, "unit_amount_minor": 200}
 ```
 
 Adds a new item to an existing shopping list. `line_amount_minor` is computed server-side. Item name must be unique within the list.
 
 | Status | Response |
 |--------|----------|
-| 201 | `{"name": "Eggs", "quantity": 6, "currency_code": "GBP", "unit_amount_minor": 200, "line_amount_minor": 1200, "status": "pending"}` |
+| 201 | `{"name": "Eggs", "quantity": 6, "unit_amount_minor": 200, "line_amount_minor": 1200, "status": "pending"}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
@@ -757,14 +752,14 @@ Adds a new item to an existing shopping list. `line_amount_minor` is computed se
 PUT /api/v1/customers/:email/shopping-lists/:name/items/:item_name
 Content-Type: application/json
 
-{"quantity": 3, "currency_code": "GBP", "unit_amount_minor": 150}
+{"quantity": 3, "unit_amount_minor": 150}
 ```
 
-Replaces the quantity, currency, and unit price of an existing item. `line_amount_minor` is recomputed server-side. Uses PUT because all mutable fields are always required. Item name and status are not changeable via this endpoint.
+Replaces the quantity and unit price of an existing item. `line_amount_minor` is recomputed server-side. Uses PUT because all mutable fields are always required. Item name and status are not changeable via this endpoint.
 
 | Status | Response |
 |--------|----------|
-| 200 | `{"name": "Eggs", "quantity": 3, "currency_code": "GBP", "unit_amount_minor": 150, "line_amount_minor": 450, "status": "pending"}` |
+| 200 | `{"name": "Eggs", "quantity": 3, "unit_amount_minor": 150, "line_amount_minor": 450, "status": "pending"}` |
 | 400 | `{"error": "Invalid request format", "details": {...}}` — validation failure |
 | 401 | `{"error": "Missing or malformed Authorization header"}` |
 | 401 | `{"error": "Access denied: user@example.com is not authorized"}` |
