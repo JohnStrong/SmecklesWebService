@@ -372,6 +372,66 @@ WHERE b.email = 'shopper@example.com'
 GROUP BY b.amount_minor, b.currency_code, b.period_start, b.period_end;
 ```
 
+### Optimising Computing Remaining Budget
+
+The live `SUM()` query above is the correct starting point — for a personal budgeting app, a single month of expenses (< 1,000 rows per user) completes in < 1 ms on any modern database. If pre-computation is ever needed, here are the options:
+
+#### Option 1 — Materialised column on `customer_budgets` ✅ Recommended
+
+Add a `spent_minor` column to `customer_budgets`. Update it in the **same DB transaction** that inserts or deletes an expense.
+
+```sql
+BEGIN;
+INSERT INTO expenses (...) VALUES (...);
+UPDATE customer_budgets SET spent_minor = spent_minor + :amount
+  WHERE email = :email AND period_start <= :day AND period_end > :day;
+COMMIT;
+```
+
+- Consistency guaranteed by the database transaction — no cache, no sync issues
+- Read is O(1): `amount_minor - spent_minor`
+- One extra UPDATE per expense write (negligible at household scale)
+- Works identically on H2 and PostgreSQL
+
+#### Option 2 — Database trigger
+
+A PostgreSQL trigger on `expenses` that recalculates `spent_minor` on the parent budget row automatically.
+
+- Transactional by definition (trigger runs inside the inserting transaction)
+- App code doesn't need to manage the derived value
+- Harder to test; H2 doesn't support PL/pgSQL, so dev/test diverges from prod
+- Full recompute on every write unless incremental delta logic is added
+
+#### Option 3 — Pekko persistent actors (event-sourced)
+
+Each customer budget gets a persistent actor whose state is the running `spent_minor`. Commands (`ExpenseAdded`, `ExpenseRemoved`) update state in memory; events are journalled for recovery.
+
+- In-memory reads are instant; actor mailbox serialises mutations (no concurrency bugs)
+- Natural fit once the Pekko actor layer is built
+- Requires persistence plugin + journal store — overkill until multi-user scale
+- Recovery from crash needs event replay or snapshot + DB verification query
+
+#### Option 4 — Write-through cache with optimistic verification
+
+Update an in-memory cache after the DB transaction commits. On read, if the cache entry is older than N seconds, verify against a lightweight `SELECT SUM(...)`.
+
+- Fast reads most of the time; self-healing on next read
+- Brief inconsistency window (acceptable — not transferring money)
+- Needs an eviction/TTL strategy
+
+#### Option 5 — Periodic rollup rows
+
+Store daily or weekly pre-computed rollup rows in a `budget_rollups` table. A scheduled job (or Pekko scheduler) fills them. Current-day spending is computed live; prior days use the rollup.
+
+- Historical data never changes, so rollups are stable
+- Read = `SUM(rollup.spent_minor) + today's live expenses`
+- Extra table + scheduler required
+- Slightly stale for today's spending unless hybridised with Option 1
+
+---
+
+**Decision:** Start with the live `SUM()` (current design). Move to Option 1 when/if profiling shows the query is a bottleneck — it's the smallest change that eliminates the problem with zero infrastructure additions.
+
 ### Querying Expenses Over a Date Range
 
 A single query pattern serves all use cases — today's expenses, the whole budget period, or any historical range:
