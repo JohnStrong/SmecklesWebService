@@ -53,7 +53,6 @@ CREATE TABLE expenses (
       category           VARCHAR(50) NOT NULL,   -- e.g. 'groceries', 'subscriptions', 'bills', 'one-off'
       description        VARCHAR(100),           -- human-readable label (e.g. "Milk x2", "Netflix")
       amount_minor       BIGINT NOT NULL,        -- cost in minor currency units
-      currency_code      CHAR(3) NOT NULL CHECK (char_length(currency_code) = 3),
       source_type        VARCHAR(30) NOT NULL,   -- 'shopping_list_item', 'subscription', 'bill', 'one_off'
       source_id          BIGINT NOT NULL,         -- FK to the originating record in the source table
       created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
