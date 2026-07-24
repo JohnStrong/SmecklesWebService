@@ -38,8 +38,8 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
     periodStart = LocalDate.of(2026, 7, 1),
     dayDate = LocalDate.of(2026, 7, 5),
     items = List(
-      ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
-      ShoppingListItem(name = "Bread", quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
+      ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L),
+      ShoppingListItem(name = "Bread", quantity = 1, unitAmountMinor = 100L, lineAmountMinor = 100L)
     ))
 
   private def withCustomer(test: Long => Any): Unit = withCustomer(shoppingList.email)(test)
@@ -91,7 +91,7 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       repository.create(shoppingList).futureValue
 
       val duplicate = shoppingList.copy(items = List(
-        ShoppingListItem(name = "Eggs", quantity = 6, currencyCode = "GBP", unitAmountMinor = 50L, lineAmountMinor = 300L)
+        ShoppingListItem(name = "Eggs", quantity = 6, unitAmountMinor = 50L, lineAmountMinor = 300L)
       ))
       val result = repository.create(duplicate).futureValue
 
@@ -259,7 +259,6 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       val result = repository.updateItemStatus("test@example.com", "test-1", "Milk", "completed").futureValue
 
       result.value.quantity shouldBe 2
-      result.value.currencyCode shouldBe "GBP"
       result.value.unitAmountMinor shouldBe 129L
       result.value.lineAmountMinor shouldBe 258L
     }
@@ -276,7 +275,6 @@ class SlickShoppingListRepositorySpec extends AnyWordSpec
       result.value.name shouldBe "Milk"
       result.value.status shouldBe "completed"
       result.value.quantity shouldBe 2
-      result.value.currencyCode shouldBe "GBP"
       result.value.unitAmountMinor shouldBe 129L
       result.value.lineAmountMinor shouldBe 258L
     }

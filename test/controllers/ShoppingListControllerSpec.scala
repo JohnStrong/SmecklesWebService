@@ -30,14 +30,14 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
     periodStart = LocalDate.of(2026, 7, 1),
     dayDate = LocalDate.of(2026, 7, 5),
     items = List(
-      ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
-      ShoppingListItem(name = "Bread", quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
+      ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L),
+      ShoppingListItem(name = "Bread", quantity = 1, unitAmountMinor = 100L, lineAmountMinor = 100L)
     )
   )
 
   // Helper to create a valid item JSON
-  private def validItemJson(name: String = "Milk", quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
-    Json.obj("name" -> name, "quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
+  private def validItemJson(name: String = "Milk", quantity: Int = 1, unitAmountMinor: Long = 100L) =
+    Json.obj("name" -> name, "quantity" -> quantity, "unit_amount_minor" -> unitAmountMinor)
 
   // Helper to create a valid create request body
   private def validCreateBody(
@@ -101,8 +101,8 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
         periodStart = LocalDate.of(2026, 7, 1),
         dayDate = LocalDate.of(2026, 7, 5),
         items = List(
-          ShoppingListItem(name = "Rice", quantity = 3, currencyCode = "GBP", unitAmountMinor = 200L, lineAmountMinor = 600L),
-          ShoppingListItem(name = "Pasta", quantity = 5, currencyCode = "USD", unitAmountMinor = 150L, lineAmountMinor = 750L)
+          ShoppingListItem(name = "Rice", quantity = 3, unitAmountMinor = 200L, lineAmountMinor = 600L),
+          ShoppingListItem(name = "Pasta", quantity = 5, unitAmountMinor = 150L, lineAmountMinor = 750L)
         )
       )
       when(mockService.create(any[ShoppingListWithItems]())).thenReturn(Future.successful(Right(listWithComputedLineAmounts)))
@@ -113,16 +113,14 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
           name = "Test",
           items = Json.arr(
             validItemJson(quantity = 3, unitAmountMinor = 200L),
-            validItemJson(quantity = 5, currencyCode = "USD", unitAmountMinor = 150L)
+            validItemJson(quantity = 5, unitAmountMinor = 150L)
           )
         ))
       val result = controller.create("user@example.com").apply(request)
 
       status(result) shouldBe CREATED
       val items = (contentAsJson(result) \ "items").as[List[JsObject]]
-      (items(0) \ "currency_code").as[String] shouldBe "GBP"
       (items(0) \ "line_amount_minor").as[Long] shouldBe 600L
-      (items(1) \ "currency_code").as[String] shouldBe "USD"
       (items(1) \ "line_amount_minor").as[Long] shouldBe 750L
     }
 
@@ -196,34 +194,12 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
       status(result) shouldBe BAD_REQUEST
     }
 
-    "return 400 when currency_code is missing" in {
-      val (controller, _) = createFixture()
-
-      val request = FakeRequest(POST, "/")
-        .withHeaders("Content-Type" -> "application/json")
-        .withBody(validCreateBody(items = Json.arr(Json.obj("quantity" -> 1, "unit_amount_minor" -> 100))))
-      val result = controller.create("user@example.com").apply(request)
-
-      status(result) shouldBe BAD_REQUEST
-    }
-
     "return 400 when unit_amount_minor is missing" in {
       val (controller, _) = createFixture()
 
       val request = FakeRequest(POST, "/")
         .withHeaders("Content-Type" -> "application/json")
-        .withBody(validCreateBody(items = Json.arr(Json.obj("quantity" -> 1, "currency_code" -> "GBP"))))
-      val result = controller.create("user@example.com").apply(request)
-
-      status(result) shouldBe BAD_REQUEST
-    }
-
-    "return 400 when currency_code is not exactly 3 characters" in {
-      val (controller, _) = createFixture()
-
-      val request = FakeRequest(POST, "/")
-        .withHeaders("Content-Type" -> "application/json")
-        .withBody(validCreateBody(items = Json.arr(validItemJson(currencyCode = "GB"))))
+        .withBody(validCreateBody(items = Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))))
       val result = controller.create("user@example.com").apply(request)
 
       status(result) shouldBe BAD_REQUEST
@@ -387,7 +363,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
 
     "return 200 with updated item when marking as completed" in {
       val (controller, mockService) = createFixture()
-      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
       when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
         .thenReturn(Future.successful(Right(updatedItem)))
 
@@ -405,7 +381,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
 
     "return 200 when reverting to pending" in {
       val (controller, mockService) = createFixture()
-      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "pending")
+      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L, status = "pending")
       when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "pending"))
         .thenReturn(Future.successful(Right(updatedItem)))
 
@@ -460,7 +436,7 @@ class ShoppingListControllerSpec extends AnyWordSpec with Matchers {
 
     "return 200 when item already has the requested status (idempotent)" in {
       val (controller, mockService) = createFixture()
-      val item = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      val item = ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
       when(mockService.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
         .thenReturn(Future.successful(Right(item)))
 

@@ -23,7 +23,6 @@ case class DecoupledShoppingListItem(
   shoppingListId: Long,
   name: String,
   quantity: Int,
-  currencyCode: String,
   unitAmountMinor: Long,
   lineAmountMinor: Long,
   status: String
@@ -39,7 +38,6 @@ object DecoupledShoppingList {
       items = items.map(i => ShoppingListItem(
         name = i.name,
         quantity = i.quantity,
-        currencyCode = i.currencyCode,
         unitAmountMinor = i.unitAmountMinor,
         lineAmountMinor = i.lineAmountMinor,
         status = i.status
@@ -52,7 +50,6 @@ object DecoupledShoppingListItem {
     ShoppingListItem(
       name = row.name,
       quantity = row.quantity,
-      currencyCode = row.currencyCode,
       unitAmountMinor = row.unitAmountMinor,
       lineAmountMinor = row.lineAmountMinor,
       status = status
@@ -84,12 +81,11 @@ class SlickShoppingListRepository @Inject()(
     def shoppingListId = column[Long]("shopping_list_id")
     def name = column[String]("name")
     def quantity = column[Int]("quantity")
-    def currencyCode = column[String]("currency_code")
     def unitAmountMinor = column[Long]("unit_amount_minor")
     def lineAmountMinor = column[Long]("line_amount_minor")
     def status = column[String]("status")
 
-    def * = (id, shoppingListId, name, quantity, currencyCode, unitAmountMinor, lineAmountMinor, status) <> (DecoupledShoppingListItem.apply, DecoupledShoppingListItem.unapply)
+    def * = (id, shoppingListId, name, quantity, unitAmountMinor, lineAmountMinor, status) <> (DecoupledShoppingListItem.apply, DecoupledShoppingListItem.unapply)
 
     def shoppingListFK = foreignKey("fk_list", shoppingListId, shoppingLists)(_.id, onDelete = ForeignKeyAction.Cascade)
   }
@@ -202,7 +198,6 @@ class SlickShoppingListRepository @Inject()(
       shoppingListId,
       i.name,
       i.quantity,
-      i.currencyCode,
       i.unitAmountMinor,
       i.lineAmountMinor,
       i.status

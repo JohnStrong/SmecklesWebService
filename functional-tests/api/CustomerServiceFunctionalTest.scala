@@ -172,7 +172,7 @@ class CustomerServiceFunctionalTest extends PlaySpec with AuthenticatedFunctiona
           "name" -> "Groceries",
           "period_start" -> "2026-07-01",
           "day_date" -> "2026-07-05",
-          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2, "currency_code" -> "GBP", "unit_amount_minor" -> 129))
+          "items" -> Json.arr(Json.obj("name" -> "Milk", "quantity" -> 2, "unit_amount_minor" -> 129))
         ))
       status(route(app, createList).get) mustBe CREATED
 

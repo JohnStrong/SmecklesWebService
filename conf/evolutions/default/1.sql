@@ -37,7 +37,6 @@ CREATE TABLE shopping_list_items (
      shopping_list_id       BIGINT NOT NULL,
      name                   VARCHAR(100) NOT NULL,  -- human-readable item label (e.g. "Milk", "Bread")
      quantity               INT NOT NULL,
-     currency_code          CHAR(3) NOT NULL CHECK (char_length(currency_code)=3), -- ISO 4217
      unit_amount_minor      BIGINT NOT NULL,        -- minor units (pence/cents/etc.) e.g. 12.34$ -> 1234
      line_amount_minor      BIGINT NOT NULL,        -- quantity * unit_amount_minor
      status                 VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending' or 'completed'

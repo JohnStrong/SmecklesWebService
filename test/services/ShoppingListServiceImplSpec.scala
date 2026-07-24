@@ -14,8 +14,8 @@ import scala.concurrent.Future
 class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFutures {
 
   private val testItems = List(
-    ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L),
-    ShoppingListItem(name = "Bread", quantity = 1, currencyCode = "GBP", unitAmountMinor = 100L, lineAmountMinor = 100L)
+    ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L),
+    ShoppingListItem(name = "Bread", quantity = 1, unitAmountMinor = 100L, lineAmountMinor = 100L)
   )
   private val testList = ShoppingListWithItems(
     email = "user@example.com",
@@ -149,7 +149,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Right with updated item when status is valid" in {
       val (service, mockRepo) = freshService()
-      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      val updatedItem = ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
       when(mockRepo.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
         .thenReturn(Future.successful(Right(updatedItem)))
 
@@ -179,7 +179,7 @@ class ShoppingListServiceImplSpec extends AnyWordSpec with Matchers with ScalaFu
 
     "return Right when item already has the requested status (idempotent)" in {
       val (service, mockRepo) = freshService()
-      val item = ShoppingListItem(name = "Milk", quantity = 2, currencyCode = "GBP", unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
+      val item = ShoppingListItem(name = "Milk", quantity = 2, unitAmountMinor = 129L, lineAmountMinor = 258L, status = "completed")
       when(mockRepo.updateItemStatus("user@example.com", "Groceries", "Milk", "completed"))
         .thenReturn(Future.successful(Right(item)))
 

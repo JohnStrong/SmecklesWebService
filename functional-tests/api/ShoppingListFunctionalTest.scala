@@ -8,8 +8,8 @@ import play.api.test.Helpers.*
 class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTest with CustomerFixture {
 
   // Helper to create a valid item JSON
-  private def validItemJson(name: String = "Milk", quantity: Int = 1, currencyCode: String = "GBP", unitAmountMinor: Long = 100L) =
-    Json.obj("name" -> name, "quantity" -> quantity, "currency_code" -> currencyCode, "unit_amount_minor" -> unitAmountMinor)
+  private def validItemJson(name: String = "Milk", quantity: Int = 1, unitAmountMinor: Long = 100L) =
+    Json.obj("name" -> name, "quantity" -> quantity, "unit_amount_minor" -> unitAmountMinor)
 
   // Helper to create a valid create request body
   private def validCreateBody(
@@ -225,17 +225,10 @@ class ShoppingListFunctionalTest extends PlaySpec with AuthenticatedFunctionalTe
       status(route(app, request).get) mustBe BAD_REQUEST
     }
 
-    "return 400 when currency_code is missing" in {
-      val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
-        .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(validCreateBody(items = Json.arr(Json.obj("quantity" -> 1, "unit_amount_minor" -> 100))))
-      status(route(app, request).get) mustBe BAD_REQUEST
-    }
-
     "return 400 when unit_amount_minor is missing" in {
       val request = FakeRequest(POST, "/api/v1/customers/valid@test.com/shopping-lists")
         .withHeaders(authHeader(), "Content-Type" -> "application/json")
-        .withBody(validCreateBody(items = Json.arr(Json.obj("quantity" -> 1, "currency_code" -> "GBP"))))
+        .withBody(validCreateBody(items = Json.arr(Json.obj("name" -> "Milk", "quantity" -> 1))))
       status(route(app, request).get) mustBe BAD_REQUEST
     }
 
