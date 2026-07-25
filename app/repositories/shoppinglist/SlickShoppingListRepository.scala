@@ -2,9 +2,7 @@ package repositories.shoppinglist
 
 import models.{ShoppingListItem, ShoppingListWithItems}
 import play.api.db.slick.{DatabaseConfigProvider, HasDatabaseConfigProvider}
-import repositories.SlickDataRepository
 import slick.jdbc.JdbcProfile
-import slick.lifted.Query
 
 import java.time.LocalDate
 import javax.inject.Inject
