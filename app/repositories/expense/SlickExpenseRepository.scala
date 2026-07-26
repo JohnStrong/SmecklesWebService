@@ -1,6 +1,7 @@
 package repositories.expense
 
-import models.Expense
+import models.{Expense, ExpenseCategory, SourceType}
+import repositories.DataIntegrityException
 import slick.dbio.DBIO
 
 case class ExpenseRow(
@@ -14,6 +15,28 @@ case class ExpenseRow(
     sourceId: Long,
     createdAt: Long
 )
+
+object ExpenseRow {
+  extension [T](e: Either[String, T]) {
+    def orThrowDataIntegrity: T =
+      e.fold(msg => throw DataIntegrityException(msg), identity)
+  }
+
+  def toExpense(expenseRow: ExpenseRow): Expense = {
+    val sourceType = SourceType.fromTableName(expenseRow.sourceType).orThrowDataIntegrity
+    val expenseCategory = ExpenseCategory.fromDBValue(expenseRow.category).orThrowDataIntegrity
+    Expense(
+      email = expenseRow.email,
+      dayDate = expenseRow.dayDate.toLocalDate,
+      category = ExpenseCategory.valueOf(expenseRow.category),
+      description = expenseRow.description,
+      amountMinor = expenseRow.amountMinor,
+      sourceType = sourceType,
+      sourceId = expenseRow.sourceId,
+      createdAt = expenseRow.createdAt
+    )
+  }
+}
 
 class SlickExpenseRepository extends ExpenseRepository {
 

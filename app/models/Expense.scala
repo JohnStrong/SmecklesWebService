@@ -14,6 +14,17 @@ import java.time.LocalDate
 enum SourceType(val tableName: String):
   case ShoppingListItem extends SourceType("shopping_list_items")
 
+object SourceType:
+  /**
+   * Resolves a database table name to its corresponding [[SourceType]] enum case.
+   *
+   * @param s the table name stored in the `source_type` DB column
+   * @return `Right(sourceType)` if the name matches a known case,
+   *         `Left(errorMessage)` otherwise
+   */
+  def fromTableName(s: String): Either[String, SourceType] =
+    values.find(_.tableName == s).toRight(s"Unknown source table name: $s")
+
 /**
  * A logical spending category that an expense belongs to.
  *
@@ -35,6 +46,19 @@ object ExpenseCategory:
   val applicableSources: Map[ExpenseCategory, Set[SourceType]] = Map(
     Groceries -> Set(SourceType.ShoppingListItem),
   )
+
+  /**
+   * Resolves a database string value to its corresponding [[ExpenseCategory]] enum case.
+   *
+   * Matching is exact (case-sensitive) against the enum case name (e.g. "Groceries").
+   *
+   * @param s the category string stored in the `category` DB column
+   * @return `Right(category)` if the value matches a known case,
+   *         `Left(errorMessage)` otherwise
+   */
+  def fromDBValue(s: String): Either[String, ExpenseCategory] = {
+    values.find(_.toString == s).toRight(s"Unknown expense category: $s")
+  }
 
   extension (cat: ExpenseCategory)
     /** Returns true if this category accepts expenses from the given source type. */
