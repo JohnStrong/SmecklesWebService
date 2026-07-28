@@ -120,5 +120,9 @@ class SlickExpenseRepository(
    * @return a DBIO action yielding Right with the expense on success (deleted or
    *         already absent), or Left with an error message on unexpected failure
    */
-  override def delete(expense: Expense): DBIO[Either[String, Expense]] = ???
+  override def delete(expense: Expense): DBIO[Either[String, Expense]] =
+    expenses
+      .filter(e => e.sourceType === expense.sourceType.tableName && e.sourceId === expense.sourceId)
+      .delete
+      .map(_ => Right(expense))
 }

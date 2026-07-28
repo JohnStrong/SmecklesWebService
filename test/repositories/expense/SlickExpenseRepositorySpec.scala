@@ -146,6 +146,10 @@ class SlickExpenseRepositorySpec extends AnyWordSpec
       val result = dbExecutor.run(repository.insert(testExpense)).futureValue
 
       result.value shouldBe testExpense
+
+      // Verify persisted — re-inserting the same source should fail
+      val ex = dbExecutor.run(repository.insert(testExpense)).failed.futureValue
+      ex shouldBe a[java.sql.SQLException]
     }
 
     "throw constraint violation when inserting duplicate source_type + source_id" in withCustomer(testExpense.email) {
@@ -167,6 +171,54 @@ class SlickExpenseRepositorySpec extends AnyWordSpec
       val result = dbExecutor.run(repository.insert(different)).futureValue
 
       result.value shouldBe different
+    }
+  }
+
+  "delete" should {
+
+    "delete an existing expense by source_type and source_id and return Right" in withCustomer(testExpense.email) {
+      dbExecutor.run(repository.insert(testExpense)).futureValue
+
+      val result = dbExecutor.run(repository.delete(testExpense)).futureValue
+
+      result.value shouldBe testExpense
+
+      // Verify the expense is gone — re-insert should succeed
+      val reInsert = dbExecutor.run(repository.insert(testExpense)).futureValue
+      reInsert.value shouldBe testExpense
+    }
+
+    "return Right when expense does not exist (idempotent)" in withCustomer(testExpense.email) {
+      val result = dbExecutor.run(repository.delete(testExpense)).futureValue
+
+      result.value shouldBe testExpense
+    }
+
+    "only delete the expense matching the specific source_type + source_id" in withCustomer(testExpense.email) {
+      dbExecutor.run(repository.insert(testExpense)).futureValue
+
+      val other = testExpense.copy(sourceId = 2L)
+      dbExecutor.run(repository.insert(other)).futureValue
+
+      // Delete only the first one
+      dbExecutor.run(repository.delete(testExpense)).futureValue
+
+      // Verify the deleted expense is gone — re-insert should succeed
+      val reInsert = dbExecutor.run(repository.insert(testExpense)).futureValue
+      reInsert.value shouldBe testExpense
+
+      // Verify the other expense is still there — re-insert should fail
+      val ex = dbExecutor.run(repository.insert(other)).failed.futureValue
+      ex shouldBe a[java.sql.SQLException]
+    }
+
+    "allow re-inserting after delete (complete → pending → complete cycle)" in withCustomer(testExpense.email) {
+      dbExecutor.run(repository.insert(testExpense)).futureValue
+      dbExecutor.run(repository.delete(testExpense)).futureValue
+
+      // Should be able to insert again after deletion
+      val result = dbExecutor.run(repository.insert(testExpense)).futureValue
+      result.value shouldBe testExpense
     }
   }
 }
